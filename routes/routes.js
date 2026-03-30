@@ -1,5 +1,5 @@
 import { Router } from "express";
 const router = Router();
 
-router.route("/login").post();
+// router.route("/login").post();
 export { router };

@@ -22,13 +22,6 @@ const userSchema = new Schema(
       enum: roles,
       default: "Student",
     },
-    username: {
-      type: String,
-      required: true,
-      lowercase: true,
-      trim: true,
-      unique: true,
-    },
     fullname: {
       type: String,
       trim: true,
@@ -41,7 +34,7 @@ const userSchema = new Schema(
         return this.role === "Student";
       },
     },
-    divison: {
+    division: {
       type: String,
       required: function () {
         return this.role === "Student";

@@ -2,6 +2,7 @@ import express from "express";
 const app = express();
 import cookieParser from "cookie-parser";
 import { router } from "./routes/routes.js";
+import cors from "cors";
 
 app.use(
   cors({

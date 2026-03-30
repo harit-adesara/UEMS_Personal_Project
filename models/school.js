@@ -8,6 +8,10 @@ const schoolSchema = new Schema(
       required: true,
       trim: true,
     },
+    isDeleted: {
+      type: Boolean,
+      default: false,
+    },
   },
   { timestamps: true },
 );

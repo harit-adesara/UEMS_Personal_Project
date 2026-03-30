@@ -14,6 +14,10 @@ const divisionSchema = new Schema(
       ref: "Branch",
       required: true,
     },
+    isDeleted: {
+      type: Boolean,
+      default: false,
+    },
   },
   { timestamps: true },
 );

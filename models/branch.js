@@ -13,6 +13,10 @@ const branchSchema = new Schema(
       ref: "School",
       required: true,
     },
+    isDeleted: {
+      type: Boolean,
+      default: false,
+    },
   },
   { timestamps: true },
 );
