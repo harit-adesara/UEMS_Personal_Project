@@ -34,6 +34,11 @@ const login = asyncHandler(async (req, res) => {
   if (!user) {
     throw new ApiError(404, "User not found");
   }
+
+  if (user.status === "inactive" || user.status === "deleted") {
+    throw new ApiError(404, "Not authorized");
+  }
+
   const check = await user.isPasswordCorrect(password);
 
   if (!check) {
@@ -111,15 +116,17 @@ const registerUser = asyncHandler(async (req, res) => {
     throw new ApiError(404, "User not found");
   }
 
-  const newUser = await User.findOneAndUpdate(
-    { email: email },
-    { $set: { password: password } },
-    { new: true, validateBeforeSave: true },
-  );
+  const newUser = await User.findOne({ email });
 
   if (!newUser) {
     throw new ApiError(404, "User not created");
   }
+
+  newUser.status = "active";
+  newUser.password = password;
+  newUser.emailVerificationToken = "";
+  newUser.emailVerificationExpiry = "";
+  await newUser.save();
 
   const createdUser = await User.findById(user._id).select(
     "-password -refreshToken -emailVerificationToken -emailVerificationExpiry",
@@ -271,6 +278,47 @@ const changePassword = asyncHandler(async (req, res) => {
     .json(new ApiResponse(200, {}, "Password changed successfully"));
 });
 
+const resendCreateUserMail = asyncHandler(async (req, res) => {
+  if (req.user.role !== "Admin") {
+    throw new ApiError(403, "Unauthorized user");
+  }
+
+  const { email } = req.body;
+
+  if (!email) {
+    throw new ApiError(400, "Email is required");
+  }
+
+  const user = await User.findOne({ email });
+
+  if (!user || user.status === "deleted") {
+    throw new ApiError(404, "User not found");
+  }
+
+  if (user.status === "active") {
+    throw new ApiError(400, "User already active");
+  }
+
+  const { unHashedToken, hashedToken, tokenExpiry } =
+    user.generateTemporaryToken();
+
+  user.emailVerificationToken = hashedToken;
+  user.emailVerificationExpiry = tokenExpiry;
+
+  await user.save();
+
+  await sendEmail({
+    email: user.email,
+    subject: "Password set email",
+    mailgenContent: registerEmail(
+      user.fullname,
+      `${process.env.registerUrl}/${unHashedToken}`,
+    ),
+  });
+
+  res.status(200).json(new ApiResponse(200, {}, "Invitation email resent"));
+});
+
 export {
   login,
   logOut,
@@ -281,4 +329,5 @@ export {
   forgotPasswordRequest,
   resetForgetPassword,
   changePassword,
+  resendCreateUserMail,
 };
