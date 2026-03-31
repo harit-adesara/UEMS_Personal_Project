@@ -1343,6 +1343,12 @@ const deleteEventCommon = asyncHandler(async (req, res) => {
     throw new ApiError(404, "Event ID not present");
   }
 
+  const event = await Event.findById(eventId);
+
+  if (!event) {
+    throw new ApiError(404, "Event not found");
+  }
+
   if (event.organizedBy.toString() !== req.user._id.toString()) {
     throw new ApiError(404, "Only owner of this event can delete it");
   }
@@ -1351,10 +1357,7 @@ const deleteEventCommon = asyncHandler(async (req, res) => {
     throw new ApiError(404, "Only pending event can be deleted");
   }
 
-  const event = await Event.findByIdAndDelete(eventId);
+  await event.deleteOne();
 
-  if (!event) {
-    throw new ApiError(404, "Event not found");
-  }
   res.status(200).json(new ApiResponse(200, {}, "Event deleted successfully"));
 });

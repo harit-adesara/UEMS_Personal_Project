@@ -104,10 +104,11 @@ const registerUser = asyncHandler(async (req, res) => {
   }
   let hashedToken = crypto
     .createHash("sha256")
-    .update(resetToken)
+    .update(unHashedToken)
     .digest("hex");
 
   const user = await User.findOne({
+    email,
     emailVerificationToken: hashedToken,
     emailVerificationExpiry: { $gt: new Date() },
   });
@@ -116,17 +117,11 @@ const registerUser = asyncHandler(async (req, res) => {
     throw new ApiError(404, "User not found");
   }
 
-  const newUser = await User.findOne({ email });
-
-  if (!newUser) {
-    throw new ApiError(404, "User not created");
-  }
-
-  newUser.status = "active";
-  newUser.password = password;
-  newUser.emailVerificationToken = "";
-  newUser.emailVerificationExpiry = "";
-  await newUser.save();
+  user.status = "active";
+  user.password = password;
+  user.emailVerificationToken = "";
+  user.emailVerificationExpiry = "";
+  await user.save();
 
   const createdUser = await User.findById(user._id).select(
     "-password -refreshToken -emailVerificationToken -emailVerificationExpiry",
@@ -138,11 +133,7 @@ const registerUser = asyncHandler(async (req, res) => {
   return res
     .status(201)
     .json(
-      new ApiResponse(
-        200,
-        { user: createdUser },
-        "User registered successfully",
-      ),
+      new ApiResponse(200, { createdUser }, "User registered successfully"),
     );
 });
 
@@ -279,10 +270,6 @@ const changePassword = asyncHandler(async (req, res) => {
 });
 
 const resendCreateUserMail = asyncHandler(async (req, res) => {
-  if (req.user.role !== "Admin") {
-    throw new ApiError(403, "Unauthorized user");
-  }
-
   const { email } = req.body;
 
   if (!email) {
