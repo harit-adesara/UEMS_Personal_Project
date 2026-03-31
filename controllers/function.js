@@ -10,6 +10,42 @@ import { registerEmail, sendEmail } from "../utils/mail.js";
 
 // admin funtionality
 
+const validateSchool = async (schoolId) => {
+  const school = await School.findById(schoolId);
+  if (!school || school.isDeleted) {
+    throw new ApiError(400, "Invalid school");
+  }
+  return school;
+};
+
+const validateBranch = async (branchId, schoolId = null) => {
+  const branch = await Branch.findById(branchId);
+
+  if (!branch || branch.isDeleted) {
+    throw new ApiError(400, "Invalid branch");
+  }
+
+  if (schoolId && branch.school.toString() !== schoolId) {
+    throw new ApiError(400, "Branch does not belong to given school");
+  }
+
+  return branch;
+};
+
+const validateDivision = async (divisionId, branchId = null) => {
+  const division = await Division.findById(divisionId);
+
+  if (!division || division.isDeleted) {
+    throw new ApiError(400, "Invalid division");
+  }
+
+  if (branchId && division.branch.toString() !== branchId) {
+    throw new ApiError(400, "Division does not belong to given branch");
+  }
+
+  return division;
+};
+
 const createUser = asyncHandler(async (req, res) => {
   if (req.user.role !== "Admin") {
     throw new ApiError(403, "Unauthorized user");
@@ -22,21 +58,6 @@ const createUser = asyncHandler(async (req, res) => {
 
   if (!fullname || !email || !role) {
     throw new ApiError(400, "Missing required fields");
-  }
-
-  if (school) {
-    const s = await School.findById(school);
-    if (!s || s.isDeleted) throw new ApiError(400, "Invalid school");
-  }
-
-  if (branch) {
-    const b = await Branch.findById(branch);
-    if (!b || b.isDeleted) throw new ApiError(400, "Invalid branch");
-  }
-
-  if (division) {
-    const d = await Division.findById(division);
-    if (!d || d.isDeleted) throw new ApiError(400, "Invalid division");
   }
 
   if (role === "Student") {
@@ -56,7 +77,15 @@ const createUser = asyncHandler(async (req, res) => {
     throw new ApiError(400, "School required for Dean");
   }
 
+  if (school) await validateSchool(school);
+  if (branch) await validateBranch(branch, school);
+  if (division) await validateDivision(division, branch);
+
   let user = await User.findOne({ email });
+
+  if (user && user.status !== "deleted") {
+    throw new ApiError(409, "User already exists");
+  }
 
   if (user) {
     if (user.status === "deleted") {
@@ -105,6 +134,48 @@ const createUser = asyncHandler(async (req, res) => {
   });
 
   res.status(201).json(new ApiResponse(201, user, "User created successfully"));
+});
+
+const getEvent = asyncHandler(async (req, res) => {
+  try {
+    if (req.user.role === "Admin") {
+      let filter = {
+        startTime: { $gte: new Date() },
+      };
+      if (req.query.status) {
+        filter.status = req.query.status;
+      }
+      if (req.query.organizedBy) {
+        filter.organizedBy = req.query.organizedBy;
+      }
+      if (req.query.name) {
+        filter.name = req.query.name;
+      }
+
+      const events = await Event.find(filter).sort({ date: 1 });
+      if (events.length === 0) {
+        throw new ApiError(404, "Events not found");
+      }
+      return res.status(200).json(new ApiResponse(200, events));
+    }
+  } catch (error) {
+    throw new ApiError(404, "Event not found");
+  }
+});
+
+const getUser = asyncHandler(async (req, res) => {
+  try {
+    const { email } = req.body;
+    const user = await User.findOne({ email });
+    if (!user) {
+      throw new ApiError(404, "User not found");
+    }
+    res
+      .status(200)
+      .json(new ApiResponse(200, { user }, "User fetched successfully"));
+  } catch (error) {
+    throw new ApiError(404, "Erro while fetching user");
+  }
 });
 
 const eventStatusApprove = asyncHandler(async (req, res) => {
@@ -171,24 +242,18 @@ const modifyUser = asyncHandler(async (req, res) => {
   }
 
   const { email, ...updates } = req.body;
-
-  if (!email) {
-    throw new ApiError(400, "Email is required");
-  }
+  if (!email) throw new ApiError(400, "Email is required to identify user");
 
   const user = await User.findOne({ email });
-
-  if (!user) {
-    throw new ApiError(404, "User not found");
-  }
+  if (!user) throw new ApiError(404, "User not found");
 
   const allowedFields = [
     "fullname",
     "role",
     "roll_number",
-    "division",
     "school",
     "branch",
+    "division",
   ];
 
   for (const key of Object.keys(updates)) {
@@ -197,64 +262,41 @@ const modifyUser = asyncHandler(async (req, res) => {
     }
   }
 
-  if (updates.school !== undefined) {
-    const s = await School.findById(updates.school);
-    if (!s || s.isDeleted) {
-      throw new ApiError(400, "Invalid school");
-    }
-  }
-
-  if (updates.branch !== undefined) {
-    const b = await Branch.findById(updates.branch);
-    if (!b || b.isDeleted) {
-      throw new ApiError(400, "Invalid branch");
-    }
-  }
-
-  if (updates.division !== undefined) {
-    const d = await Division.findById(updates.division);
-    if (!d || d.isDeleted) {
-      throw new ApiError(400, "Invalid division");
-    }
-  }
+  if (updates.school) await validateSchool(updates.school);
+  if (updates.branch)
+    await validateBranch(updates.branch, updates.school || user.school);
+  if (updates.division)
+    await validateDivision(updates.division, updates.branch || user.branch);
 
   for (const key of Object.keys(updates)) {
     user[key] = updates[key];
   }
 
-  if (updates.role) {
-    const role = updates.role;
+  const role = updates.role || user.role;
 
-    if (role !== "Student") {
-      user.roll_number = undefined;
-      user.division = undefined;
-    }
-
-    if (role !== "Student" && role !== "HoD") {
-      user.branch = undefined;
-    }
-
-    if (role !== "Student" && role !== "Dean") {
-      user.school = undefined;
-    }
+  if (role !== "Student") {
+    user.roll_number = undefined;
+    user.division = undefined;
+  }
+  if (role !== "Student" && role !== "HoD") {
+    user.branch = undefined;
+  }
+  if (role !== "Student" && role !== "Dean") {
+    user.school = undefined;
   }
 
-  if (user.role === "Student") {
+  if (role === "Student") {
     if (!user.roll_number || !user.division || !user.school || !user.branch) {
       throw new ApiError(
         400,
-        "Student requires roll_number, division, school and branch",
+        "Student requires roll_number, division, school, and branch",
       );
     }
   }
-
-  if (user.role === "HoD" && !user.branch) {
+  if (role === "HoD" && !user.branch)
     throw new ApiError(400, "HoD requires branch");
-  }
-
-  if (user.role === "Dean" && !user.school) {
+  if (role === "Dean" && !user.school)
     throw new ApiError(400, "Dean requires school");
-  }
 
   await user.save();
 
@@ -702,6 +744,8 @@ export {
   modifyUser,
   deleteUser,
   modifyEvent,
+  getUser,
+  getEvent,
   createBranch,
   createSchool,
   createDivision,
@@ -712,3 +756,605 @@ export {
   deleteDivision,
   deleteSchool,
 };
+
+// faculty, dean , hod, club , director
+
+//faculty
+
+const getDivisionCount = async (branchId) => {
+  return await Division.countDocuments({ branch: branchId });
+};
+
+const isDivisionLevelEvent = async (parsedTargets) => {
+  if (parsedTargets.length !== 1) return false;
+
+  const school = parsedTargets[0];
+
+  if (!school.branches || school.branches.length !== 1) return false;
+
+  const branchObj = school.branches[0];
+  const { branch, divisions } = branchObj;
+
+  if (!divisions || divisions.length === 0) return false;
+
+  const totalCount = await getDivisionCount(branch);
+
+  return divisions.length < totalCount;
+};
+
+const createEventFaculty = asyncHandler(async (req, res) => {
+  if (req.user.role !== "Faculty") {
+    throw new ApiError(403, "Only faculty can create events");
+  }
+  const {
+    name,
+    detail,
+    startTime,
+    endTime,
+    registrationDeadline,
+    venue,
+    amount,
+    targets,
+  } = req.body;
+
+  const epsFile = req.files?.epsFile;
+  const photo = req.files?.photo;
+
+  if (!name || !detail || !startTime || !venue || !targets || !epsFile) {
+    throw new ApiError(400, "Missing required fields");
+  }
+
+  if (endTime && new Date(endTime) < new Date(startTime)) {
+    throw new ApiError(400, "End time must be after start time");
+  }
+
+  if (
+    registrationDeadline &&
+    new Date(registrationDeadline) > new Date(startTime)
+  ) {
+    throw new ApiError(400, "Registration deadline must be before start time");
+  }
+
+  const parsedTargets = JSON.parse(targets);
+
+  for (const t of parsedTargets) {
+    await validateSchool(t.school);
+
+    for (const b of t.branches) {
+      await validateBranch(b.branch, t.school);
+
+      if (b.divisions?.length) {
+        for (const d of b.divisions) {
+          await validateDivision(d, b.branch);
+        }
+      }
+    }
+  }
+
+  const isDivisionLevel = await isDivisionLevelEvent(parsedTargets);
+  const status = isDivisionLevel ? "Approved" : "Pending";
+
+  const uploadedEps = await uploadToCloudinaryBuffer(
+    epsFile.buffer,
+    "events/eps",
+  );
+
+  let uploadedPhoto;
+  if (photo) {
+    uploadedPhoto = await uploadToCloudinaryBuffer(
+      photo.buffer,
+      "events/photo",
+    );
+  }
+
+  const event = await Event.create({
+    name,
+    detail,
+    photo: uploadedPhoto || undefined,
+    epsFile: uploadedEps,
+    organizedBy: req.user._id,
+    targets: parsedTargets,
+    startTime,
+    endTime,
+    registrationDeadline,
+    venue,
+    amount: amount || 0,
+    status,
+  });
+
+  res
+    .status(201)
+    .json(new ApiResponse(201, event, "Event created successfully"));
+});
+
+// HoD
+
+const createEventHoD = asyncHandler(async (req, res) => {
+  if (req.user.role !== "HoD") {
+    throw new ApiError(404, "Unauthorized error");
+  }
+
+  const {
+    name,
+    detail,
+    startTime,
+    endTime,
+    registrationDeadline,
+    venue,
+    amount,
+    targets,
+  } = req.body;
+
+  const epsFile = req.files?.epsFile;
+  const photo = req.files?.photo;
+
+  if (!name || !detail || !startTime || !venue || !targets || !epsFile) {
+    throw new ApiError(400, "Missing required fields");
+  }
+
+  if (endTime && new Date(endTime) < new Date(startTime)) {
+    throw new ApiError(400, "End time must be after start time");
+  }
+
+  if (
+    registrationDeadline &&
+    new Date(registrationDeadline) > new Date(startTime)
+  ) {
+    throw new ApiError(400, "Registration deadline must be before start time");
+  }
+
+  const parsedTargets = JSON.parse(targets);
+
+  for (const t of parsedTargets) {
+    await validateSchool(t.school);
+
+    for (const b of t.branches) {
+      await validateBranch(b.branch, t.school);
+
+      if (b.divisions?.length) {
+        for (const d of b.divisions) {
+          await validateDivision(d, b.branch);
+        }
+      }
+    }
+  }
+
+  const isBranchLevel = () => {
+    if (parsedTargets.length !== 1) {
+      return false;
+    }
+    const school = parsedTargets[0];
+    if (!school.branches || school.branches.length > 1) {
+      return false;
+    }
+    return true;
+  };
+
+  const status = isBranchLevel() ? "Approved" : "Pending";
+
+  const uploadedEps = await uploadToCloudinaryBuffer(
+    epsFile.buffer,
+    "events/eps",
+  );
+
+  let uploadedPhoto;
+  if (photo) {
+    uploadedPhoto = await uploadToCloudinaryBuffer(
+      photo.buffer,
+      "events/photo",
+    );
+  }
+
+  const event = await Event.create({
+    name,
+    detail,
+    photo: uploadedPhoto || undefined,
+    epsFile: uploadedEps,
+    organizedBy: req.user._id,
+    targets: parsedTargets,
+    startTime,
+    endTime,
+    registrationDeadline,
+    venue,
+    amount: amount || 0,
+    status,
+  });
+
+  res
+    .status(201)
+    .json(new ApiResponse(201, event, "Event created successfully"));
+});
+
+// Dean
+
+const createEventDean = asyncHandler(async (req, res) => {
+  if (req.user.role !== "Dean") {
+    throw new ApiError(404, "Unauthorized error");
+  }
+
+  const {
+    name,
+    detail,
+    startTime,
+    endTime,
+    registrationDeadline,
+    venue,
+    amount,
+    targets,
+  } = req.body;
+
+  const epsFile = req.files?.epsFile;
+  const photo = req.files?.photo;
+
+  if (!name || !detail || !startTime || !venue || !targets || !epsFile) {
+    throw new ApiError(400, "Missing required fields");
+  }
+
+  if (endTime && new Date(endTime) < new Date(startTime)) {
+    throw new ApiError(400, "End time must be after start time");
+  }
+
+  if (
+    registrationDeadline &&
+    new Date(registrationDeadline) > new Date(startTime)
+  ) {
+    throw new ApiError(400, "Registration deadline must be before start time");
+  }
+
+  const parsedTargets = JSON.parse(targets);
+
+  for (const t of parsedTargets) {
+    await validateSchool(t.school);
+
+    for (const b of t.branches) {
+      await validateBranch(b.branch, t.school);
+
+      if (b.divisions?.length) {
+        for (const d of b.divisions) {
+          await validateDivision(d, b.branch);
+        }
+      }
+    }
+  }
+
+  const isSchoolLevel = () => {
+    if (parsedTargets.length !== 1) {
+      return false;
+    }
+    return true;
+  };
+
+  const status = isSchoolLevel() ? "Approved" : "Pending";
+
+  const uploadedEps = await uploadToCloudinaryBuffer(
+    epsFile.buffer,
+    "events/eps",
+  );
+
+  let uploadedPhoto;
+  if (photo) {
+    uploadedPhoto = await uploadToCloudinaryBuffer(
+      photo.buffer,
+      "events/photo",
+    );
+  }
+
+  const event = await Event.create({
+    name,
+    detail,
+    photo: uploadedPhoto || undefined,
+    epsFile: uploadedEps,
+    organizedBy: req.user._id,
+    targets: parsedTargets,
+    startTime,
+    endTime,
+    registrationDeadline,
+    venue,
+    amount: amount || 0,
+    status,
+  });
+
+  res
+    .status(201)
+    .json(new ApiResponse(201, event, "Event created successfully"));
+});
+
+// Director
+
+const createEventDirector = asyncHandler(async (req, res) => {
+  if (req.user.role !== "Director") {
+    throw new ApiError(404, "Unauthorized error");
+  }
+
+  const {
+    name,
+    detail,
+    startTime,
+    endTime,
+    registrationDeadline,
+    venue,
+    amount,
+    targets,
+  } = req.body;
+
+  const epsFile = req.files?.epsFile;
+  const photo = req.files?.photo;
+
+  if (!name || !detail || !startTime || !venue || !targets || !epsFile) {
+    throw new ApiError(400, "Missing required fields");
+  }
+
+  if (endTime && new Date(endTime) < new Date(startTime)) {
+    throw new ApiError(400, "End time must be after start time");
+  }
+
+  if (
+    registrationDeadline &&
+    new Date(registrationDeadline) > new Date(startTime)
+  ) {
+    throw new ApiError(400, "Registration deadline must be before start time");
+  }
+
+  const parsedTargets = JSON.parse(targets);
+
+  for (const t of parsedTargets) {
+    await validateSchool(t.school);
+
+    for (const b of t.branches) {
+      await validateBranch(b.branch, t.school);
+
+      if (b.divisions?.length) {
+        for (const d of b.divisions) {
+          await validateDivision(d, b.branch);
+        }
+      }
+    }
+  }
+
+  const uploadedEps = await uploadToCloudinaryBuffer(
+    epsFile.buffer,
+    "events/eps",
+  );
+
+  let uploadedPhoto;
+  if (photo) {
+    uploadedPhoto = await uploadToCloudinaryBuffer(
+      photo.buffer,
+      "events/photo",
+    );
+  }
+
+  const event = await Event.create({
+    name,
+    detail,
+    photo: uploadedPhoto || undefined,
+    epsFile: uploadedEps,
+    organizedBy: req.user._id,
+    targets: parsedTargets,
+    startTime,
+    endTime,
+    registrationDeadline,
+    venue,
+    amount: amount || 0,
+    status: "Approved",
+  });
+
+  res
+    .status(201)
+    .json(new ApiResponse(201, event, "Event created successfully"));
+});
+
+// Club
+
+const createEventClub = asyncHandler(async (req, res) => {
+  if (req.user.role !== "Club") {
+    throw new ApiError(404, "Unauthorized error");
+  }
+
+  const {
+    name,
+    detail,
+    startTime,
+    endTime,
+    registrationDeadline,
+    venue,
+    amount,
+    targets,
+  } = req.body;
+
+  const epsFile = req.files?.epsFile;
+  const photo = req.files?.photo;
+
+  if (!name || !detail || !startTime || !venue || !targets || !epsFile) {
+    throw new ApiError(400, "Missing required fields");
+  }
+
+  if (endTime && new Date(endTime) < new Date(startTime)) {
+    throw new ApiError(400, "End time must be after start time");
+  }
+
+  if (
+    registrationDeadline &&
+    new Date(registrationDeadline) > new Date(startTime)
+  ) {
+    throw new ApiError(400, "Registration deadline must be before start time");
+  }
+
+  const parsedTargets = JSON.parse(targets);
+
+  for (const t of parsedTargets) {
+    for (const b of t.branches) {
+      if (b.divisions && b.divisions.length > 0) {
+        throw new ApiError(
+          400,
+          "Club cannot create event for specific divisions",
+        );
+      }
+    }
+  }
+
+  const uploadedEps = await uploadToCloudinaryBuffer(
+    epsFile.buffer,
+    "events/eps",
+  );
+
+  let uploadedPhoto;
+  if (photo) {
+    uploadedPhoto = await uploadToCloudinaryBuffer(
+      photo.buffer,
+      "events/photo",
+    );
+  }
+
+  const event = await Event.create({
+    name,
+    detail,
+    photo: uploadedPhoto || undefined,
+    epsFile: uploadedEps,
+    organizedBy: req.user._id,
+    targets: parsedTargets,
+    startTime,
+    endTime,
+    registrationDeadline,
+    venue,
+    amount: amount || 0,
+    status: "Pending",
+  });
+
+  res
+    .status(201)
+    .json(new ApiResponse(201, event, "Event created successfully"));
+});
+
+// common
+const modifyEventBeforeApproveCommon = asyncHandler(async (req, res) => {
+  if (!["Faculty", "HoD", "Dean", "Director", "Club"].includes(req.user.role)) {
+    throw new ApiError(403, "Unauthorized user");
+  }
+
+  const { eventId } = req.params;
+  const updates = req.body;
+
+  const event = await Event.findById(eventId);
+
+  if (!event) {
+    throw new ApiError(404, "Event not found");
+  }
+
+  if (event.organizedBy.toString() !== req.user._id.toString()) {
+    throw new ApiError(403, "You can only modify your own event");
+  }
+
+  if (event.status !== "Pending") {
+    throw new ApiError(400, "Approved events cannot be modified");
+  }
+
+  const allowedFields = [
+    "name",
+    "detail",
+    "photo",
+    "targets",
+    "startTime",
+    "endTime",
+    "registrationDeadline",
+    "venue",
+    "amount",
+  ];
+
+  for (const key of Object.keys(updates)) {
+    if (!allowedFields.includes(key)) {
+      throw new ApiError(400, `Field '${key}' cannot be updated`);
+    }
+  }
+
+  for (const key of Object.keys(updates)) {
+    event[key] = updates[key];
+  }
+
+  if (req.body.file?.photo) {
+    event.photo = req.body.file.photo;
+  }
+
+  if (req.body.file?.epsFile) {
+    event.epsFile = req.body.file.epsFile;
+  }
+
+  await event.save();
+
+  res
+    .status(200)
+    .json(new ApiResponse(200, { event }, "Event modified successfully"));
+});
+
+const modifyEventAfterApproveCommon = asyncHandler(async (req, res) => {
+  if (!["Faculty", "HoD", "Dean", "Director", "Club"].includes(req.user.role)) {
+    throw new ApiError(403, "Unauthorized user");
+  }
+
+  const { eventId } = req.params;
+  const updates = req.body;
+
+  const event = await Event.findById(eventId);
+
+  if (!event) {
+    throw new ApiError(404, "Event not found");
+  }
+
+  if (event.organizedBy.toString() !== req.user._id.toString()) {
+    throw new ApiError(403, "You can only modify your own event");
+  }
+
+  if (event.status !== "Approved") {
+    throw new ApiError(400, "Rejected events cannot be modified");
+  }
+
+  const allowedFields = [
+    "detail",
+    "startTime",
+    "endTime",
+    "registrationDeadline",
+    "venue",
+  ];
+
+  for (const key of Object.keys(updates)) {
+    if (!allowedFields.includes(key)) {
+      throw new ApiError(400, `Field '${key}' cannot be updated`);
+    }
+  }
+
+  for (const key of Object.keys(updates)) {
+    event[key] = updates[key];
+  }
+
+  await event.save();
+
+  res
+    .status(200)
+    .json(new ApiResponse(200, { event }, "Event modified successfully"));
+});
+
+const deleteEventCommon = asyncHandler(async (req, res) => {
+  if (!["Faculty", "HoD", "Dean", "Director", "Club"].includes(req.user.role)) {
+    throw new ApiError(404, "Unauthorized user");
+  }
+  const { eventId } = req.params;
+
+  if (!eventId) {
+    throw new ApiError(404, "Event ID not present");
+  }
+
+  if (event.organizedBy.toString() !== req.user._id.toString()) {
+    throw new ApiError(404, "Only owner of this event can delete it");
+  }
+
+  if (event.status !== "Pending") {
+    throw new ApiError(404, "Only pending event can be deleted");
+  }
+
+  const event = await Event.findByIdAndDelete(eventId);
+
+  if (!event) {
+    throw new ApiError(404, "Event not found");
+  }
+  res.status(200).json(new ApiResponse(200, {}, "Event deleted successfully"));
+});
