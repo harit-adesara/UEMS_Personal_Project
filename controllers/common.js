@@ -12,6 +12,7 @@ import { registerEmail, sendEmail } from "../utils/mail.js";
 import { redis, storeToken, getToken } from "../db/redis.js";
 import { Attendance } from "../models/attendance.js";
 import { determineEventLevel } from "./function.js";
+import { Registration } from "../models/registration.js";
 
 const modifyEventBeforeApproveCommon = asyncHandler(async (req, res) => {
   if (!["Faculty", "HoD", "Dean", "Director", "Club"].includes(req.user.role)) {
@@ -447,7 +448,6 @@ const eventStatusReject = asyncHandler(async (req, res) => {
 const startAttendance = asyncHandler(async (req, res) => {
   const { eventId } = req.body;
 
-  // ensure attendance doc exists
   const event = await Event.findById(eventId);
   if (!event) {
     throw new ApiError(404, "Event not exsits");
@@ -526,8 +526,8 @@ const manualMarkAttendance = asyncHandler(async (req, res) => {
 
 const getRegisteredStudents = asyncHandler(async (req, res) => {
   const { eventId } = req.params;
-  const event = await Attendance.findOne({ event: eventId }).populate(
-    "records.student",
+  const event = await Registration.find({ event: eventId }).populate(
+    "student",
     "fullname roll_number division",
   );
   if (!event) throw new ApiError(404, "Event not found");
@@ -539,15 +539,10 @@ const getRegisteredStudents = asyncHandler(async (req, res) => {
     throw new ApiError(403, "Unauthorized");
   }
 
-  const registrations = event.records;
   res
     .status(200)
     .json(
-      new ApiResponse(
-        200,
-        { registrations },
-        "Registrations fetched successfully",
-      ),
+      new ApiResponse(200, { event }, "Registrations fetched successfully"),
     );
 });
 
@@ -569,3 +564,20 @@ const getStudentAttendanceList = asyncHandler(async (req, res) => {
   }
   return res.status(200).json(new ApiResponse(200, { record }));
 });
+
+export {
+  modifyEventBeforeApproveCommon,
+  modifyEventAfterApproveCommon,
+  deleteEventCommon,
+  getEventCommon,
+  myEvent,
+  getEventFeedbackCommon,
+  getEventApprovalOrReject,
+  eventStatusApprove,
+  eventStatusReject,
+  startAttendance,
+  getCurrentToken,
+  manualMarkAttendance,
+  getRegisteredStudents,
+  getStudentAttendanceList,
+};

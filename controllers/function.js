@@ -1305,4 +1305,11 @@ const createEventClub = asyncHandler(async (req, res) => {
     .json(new ApiResponse(201, event, "Event created successfully"));
 });
 
-export { determineEventLevel };
+export {
+  determineEventLevel,
+  createEventFaculty,
+  createEventHoD,
+  createEventDean,
+  createEventDirector,
+  createEventClub,
+};
