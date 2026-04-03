@@ -22,6 +22,13 @@ const userSchema = new Schema(
       enum: roles,
       default: "Student",
     },
+    year: {
+      type: Number,
+      trim: true,
+      required: function () {
+        return this.role === "Student";
+      },
+    },
     fullname: {
       type: String,
       trim: true,
@@ -99,6 +106,9 @@ const userSchema = new Schema(
 );
 
 userSchema.pre("save", function (next) {
+  if (this.role === "Student" && !this.year) {
+    return next(new Error("Student must have year"));
+  }
   if ((this.role === "HoD" || this.role === "Student") && !this.branch) {
     return next(new Error("HoD must have branch"));
   }

@@ -31,6 +31,17 @@ const eventSchema = new Schema(
       required: true,
     },
 
+    level: {
+      type: String,
+      enum: ["Division", "College", "Branch", "School"],
+      required: true,
+    },
+
+    year: {
+      type: Number,
+      required: true,
+    },
+
     targets: [
       {
         school: {
@@ -40,15 +51,20 @@ const eventSchema = new Schema(
         },
         branches: [
           {
+            StudentYear: {
+              type: Number,
+              default: null,
+            },
             branch: {
               type: Schema.Types.ObjectId,
               ref: "Branch",
-              required: true,
+              default: null,
             },
             divisions: [
               {
                 type: Schema.Types.ObjectId,
                 ref: "Division",
+                default: null,
               },
             ],
           },
@@ -125,5 +141,7 @@ const eventSchema = new Schema(
     timestamps: true,
   },
 );
+
+eventSchema.index({ name: 1, year: 1 }, { unique: true });
 
 export const Event = mongoose.model("Event", eventSchema);

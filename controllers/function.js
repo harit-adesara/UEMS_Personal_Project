@@ -12,37 +12,26 @@ import { registerEmail, sendEmail } from "../utils/mail.js";
 
 const validateSchool = async (schoolId) => {
   const school = await School.findById(schoolId);
-  if (!school || school.isDeleted) {
-    throw new ApiError(400, "Invalid school");
-  }
+  if (!school || school.isDeleted) throw new ApiError(400, "Invalid school");
   return school;
 };
 
 const validateBranch = async (branchId, schoolId = null) => {
+  if (!branchId) return null;
   const branch = await Branch.findById(branchId);
-
-  if (!branch || branch.isDeleted) {
-    throw new ApiError(400, "Invalid branch");
-  }
-
-  if (schoolId && branch.school.toString() !== schoolId) {
+  if (!branch || branch.isDeleted) throw new ApiError(400, "Invalid branch");
+  if (schoolId && branch.school.toString() !== schoolId.toString())
     throw new ApiError(400, "Branch does not belong to given school");
-  }
-
   return branch;
 };
 
 const validateDivision = async (divisionId, branchId = null) => {
+  if (!divisionId) return null;
   const division = await Division.findById(divisionId);
-
-  if (!division || division.isDeleted) {
+  if (!division || division.isDeleted)
     throw new ApiError(400, "Invalid division");
-  }
-
-  if (branchId && division.branch.toString() !== branchId) {
+  if (branchId && division.branch.toString() !== branchId.toString())
     throw new ApiError(400, "Division does not belong to given branch");
-  }
-
   return division;
 };
 
@@ -51,7 +40,7 @@ const createUser = asyncHandler(async (req, res) => {
     throw new ApiError(403, "Unauthorized user");
   }
 
-  const { fullname, email, role, roll_number, division, school, branch } =
+  const { fullname, email, role, roll_number, division, school, branch, year } =
     req.body;
 
   const password = process.env.temp_password;
@@ -61,10 +50,10 @@ const createUser = asyncHandler(async (req, res) => {
   }
 
   if (role === "Student") {
-    if (!roll_number || !division || !school || !branch) {
+    if (!roll_number || !division || !school || !branch || !year) {
       throw new ApiError(
         400,
-        "roll_number, division, school and branch required",
+        "roll_number, division, school,year and branch required",
       );
     }
   }
@@ -93,6 +82,7 @@ const createUser = asyncHandler(async (req, res) => {
       user.role = role;
       user.password = password;
       user.status = "inactive";
+      user.year = role === "Student" ? year : undefined;
       user.roll_number = role === "Student" ? roll_number : undefined;
       user.school = role === "Student" || role === "Dean" ? school : undefined;
       user.branch = role === "Student" || role === "HoD" ? branch : undefined;
@@ -109,6 +99,7 @@ const createUser = asyncHandler(async (req, res) => {
       password,
       status: "inactive",
       role,
+      year: role === "Student" ? year : undefined,
       roll_number: role === "Student" ? roll_number : undefined,
       school: role === "Student" || role === "Dean" ? school : undefined,
       branch: role === "Student" || role === "HoD" ? branch : undefined,
@@ -139,9 +130,19 @@ const createUser = asyncHandler(async (req, res) => {
 const getEvent = asyncHandler(async (req, res) => {
   try {
     if (req.user.role === "Admin") {
-      let filter = {
-        startTime: { $gte: new Date() },
-      };
+      let filter = {};
+      if (req.query.date) {
+        const start = new Date(req.query.date);
+        const end = new Date(req.query.date);
+        end.setHours(23, 59, 59, 999);
+
+        filter.startTime = {
+          $gte: start,
+          $lte: end,
+        };
+      } else {
+        filter.startTime = { $gte: new Date() };
+      }
       if (req.query.status) {
         filter.status = req.query.status;
       }
@@ -152,11 +153,13 @@ const getEvent = asyncHandler(async (req, res) => {
         filter.name = req.query.name;
       }
 
-      const events = await Event.find(filter).sort({ date: 1 });
+      const events = await Event.find(filter).sort({ startTime: -1 });
       if (events.length === 0) {
         throw new ApiError(404, "Events not found");
       }
-      return res.status(200).json(new ApiResponse(200, events));
+      return res
+        .status(200)
+        .json(new ApiResponse(200, { events }, "Event fetched successfully"));
     }
   } catch (error) {
     throw new ApiError(404, "Event not found");
@@ -254,6 +257,7 @@ const modifyUser = asyncHandler(async (req, res) => {
     "school",
     "branch",
     "division",
+    "year",
   ];
 
   for (const key of Object.keys(updates)) {
@@ -286,10 +290,16 @@ const modifyUser = asyncHandler(async (req, res) => {
   }
 
   if (role === "Student") {
-    if (!user.roll_number || !user.division || !user.school || !user.branch) {
+    if (
+      !user.roll_number ||
+      !user.division ||
+      !user.school ||
+      !user.branch ||
+      !user.year
+    ) {
       throw new ApiError(
         400,
-        "Student requires roll_number, division, school, and branch",
+        "Student requires roll_number, division, school,year and branch",
       );
     }
   }
@@ -761,31 +771,40 @@ export {
 
 //faculty
 
-const getDivisionCount = async (branchId) => {
-  return await Division.countDocuments({ branch: branchId });
+const determineEventLevel = async (parsedTargets) => {
+  if (!parsedTargets || parsedTargets.length === 0)
+    return { level: "College", status: "Pending" };
+  if (parsedTargets.length > 1) return { level: "College", status: "Pending" };
+
+  const schoolTarget = parsedTargets[0];
+
+  const branchIds = schoolTarget.branches
+    .filter((b) => b.branch)
+    .map((b) => b.branch.toString());
+
+  const uniqueBranchCount = new Set(branchIds).size;
+  const multipleBranches =
+    uniqueBranchCount > 1 || schoolTarget.branches.some((b) => !b.branch);
+  if (multipleBranches) return { level: "School", status: "Pending" };
+
+  const branchObj = schoolTarget.branches[0];
+
+  let totalDivisions = 0;
+  if (branchObj.branch)
+    totalDivisions = await getDivisionCount(branchObj.branch);
+  const divisionsSelected = branchObj.divisions?.length || 0;
+
+  if (divisionsSelected === 0 || divisionsSelected === totalDivisions)
+    return { level: "Branch", status: "Pending" };
+
+  return { level: "Division", status: "Approved" };
 };
 
-const isDivisionLevelEvent = async (parsedTargets) => {
-  if (parsedTargets.length !== 1) return false;
-
-  const school = parsedTargets[0];
-
-  if (!school.branches || school.branches.length !== 1) return false;
-
-  const branchObj = school.branches[0];
-  const { branch, divisions } = branchObj;
-
-  if (!divisions || divisions.length === 0) return false;
-
-  const totalCount = await getDivisionCount(branch);
-
-  return divisions.length < totalCount;
-};
-
+// Create event
 const createEventFaculty = asyncHandler(async (req, res) => {
-  if (req.user.role !== "Faculty") {
+  if (req.user.role !== "Faculty")
     throw new ApiError(403, "Only faculty can create events");
-  }
+
   const {
     name,
     detail,
@@ -796,7 +815,6 @@ const createEventFaculty = asyncHandler(async (req, res) => {
     amount,
     targets,
   } = req.body;
-
   const epsFile = req.files?.epsFile;
   const photo = req.files?.photo;
 
@@ -807,7 +825,6 @@ const createEventFaculty = asyncHandler(async (req, res) => {
   if (endTime && new Date(endTime) < new Date(startTime)) {
     throw new ApiError(400, "End time must be after start time");
   }
-
   if (
     registrationDeadline &&
     new Date(registrationDeadline) > new Date(startTime)
@@ -817,12 +834,15 @@ const createEventFaculty = asyncHandler(async (req, res) => {
 
   const parsedTargets = JSON.parse(targets);
 
+  // Validate targets
   for (const t of parsedTargets) {
     await validateSchool(t.school);
 
     for (const b of t.branches) {
+      if (b.StudentYear != null && (b.StudentYear < 1 || b.StudentYear > 5)) {
+        throw new ApiError(400, "Invalid StudentYear");
+      }
       await validateBranch(b.branch, t.school);
-
       if (b.divisions?.length) {
         for (const d of b.divisions) {
           await validateDivision(d, b.branch);
@@ -831,21 +851,27 @@ const createEventFaculty = asyncHandler(async (req, res) => {
     }
   }
 
-  const isDivisionLevel = await isDivisionLevelEvent(parsedTargets);
-  const status = isDivisionLevel ? "Approved" : "Pending";
+  const year = new Date(startTime).getFullYear();
+
+  const existing = await Event.findOne({ name, year });
+
+  if (existing) {
+    throw new ApiError(400, `Event "${name}" already exists for year ${year}`);
+  }
+
+  let { level, status } = await determineEventLevel(parsedTargets);
+
+  if (req.user.role === "Faculty" && level === "Division") {
+    status = "Approved";
+  }
 
   const uploadedEps = await uploadToCloudinaryBuffer(
     epsFile.buffer,
     "events/eps",
   );
-
-  let uploadedPhoto;
-  if (photo) {
-    uploadedPhoto = await uploadToCloudinaryBuffer(
-      photo.buffer,
-      "events/photo",
-    );
-  }
+  const uploadedPhoto = photo
+    ? await uploadToCloudinaryBuffer(photo.buffer, "events/photo")
+    : undefined;
 
   const event = await Event.create({
     name,
@@ -860,13 +886,14 @@ const createEventFaculty = asyncHandler(async (req, res) => {
     venue,
     amount: amount || 0,
     status,
+    level,
+    year,
   });
 
   res
     .status(201)
     .json(new ApiResponse(201, event, "Event created successfully"));
 });
-
 // HoD
 
 const createEventHoD = asyncHandler(async (req, res) => {
@@ -909,8 +936,10 @@ const createEventHoD = asyncHandler(async (req, res) => {
     await validateSchool(t.school);
 
     for (const b of t.branches) {
+      if (b.StudentYear != null && (b.StudentYear < 1 || b.StudentYear > 5)) {
+        throw new ApiError(400, "Invalid StudentYear");
+      }
       await validateBranch(b.branch, t.school);
-
       if (b.divisions?.length) {
         for (const d of b.divisions) {
           await validateDivision(d, b.branch);
@@ -919,18 +948,19 @@ const createEventHoD = asyncHandler(async (req, res) => {
     }
   }
 
-  const isBranchLevel = () => {
-    if (parsedTargets.length !== 1) {
-      return false;
-    }
-    const school = parsedTargets[0];
-    if (!school.branches || school.branches.length > 1) {
-      return false;
-    }
-    return true;
-  };
+  const year = new Date(startTime).getFullYear();
 
-  const status = isBranchLevel() ? "Approved" : "Pending";
+  const existing = await Event.findOne({ name, year });
+
+  if (existing) {
+    throw new ApiError(400, `Event "${name}" already exists for year ${year}`);
+  }
+
+  let { level, status } = await determineEventLevel(parsedTargets);
+
+  if (req.user.role === "HoD" && ["Division", "Branch"].includes(level)) {
+    status = "Approved";
+  }
 
   const uploadedEps = await uploadToCloudinaryBuffer(
     epsFile.buffer,
@@ -958,6 +988,8 @@ const createEventHoD = asyncHandler(async (req, res) => {
     venue,
     amount: amount || 0,
     status,
+    level,
+    year,
   });
 
   res
@@ -1007,8 +1039,10 @@ const createEventDean = asyncHandler(async (req, res) => {
     await validateSchool(t.school);
 
     for (const b of t.branches) {
+      if (b.StudentYear != null && (b.StudentYear < 1 || b.StudentYear > 5)) {
+        throw new ApiError(400, "Invalid StudentYear");
+      }
       await validateBranch(b.branch, t.school);
-
       if (b.divisions?.length) {
         for (const d of b.divisions) {
           await validateDivision(d, b.branch);
@@ -1017,14 +1051,22 @@ const createEventDean = asyncHandler(async (req, res) => {
     }
   }
 
-  const isSchoolLevel = () => {
-    if (parsedTargets.length !== 1) {
-      return false;
-    }
-    return true;
-  };
+  const year = new Date(startTime).getFullYear();
 
-  const status = isSchoolLevel() ? "Approved" : "Pending";
+  const existing = await Event.findOne({ name, year });
+
+  if (existing) {
+    throw new ApiError(400, `Event "${name}" already exists for year ${year}`);
+  }
+
+  let { level, status } = await determineEventLevel(parsedTargets);
+
+  if (
+    req.user.role === "Dean" &&
+    ["School", "Division", "Branch"].includes(level)
+  ) {
+    status = "Approved";
+  }
 
   const uploadedEps = await uploadToCloudinaryBuffer(
     epsFile.buffer,
@@ -1052,6 +1094,8 @@ const createEventDean = asyncHandler(async (req, res) => {
     venue,
     amount: amount || 0,
     status,
+    level,
+    year,
   });
 
   res
@@ -1101,8 +1145,10 @@ const createEventDirector = asyncHandler(async (req, res) => {
     await validateSchool(t.school);
 
     for (const b of t.branches) {
+      if (b.StudentYear != null && (b.StudentYear < 1 || b.StudentYear > 5)) {
+        throw new ApiError(400, "Invalid StudentYear");
+      }
       await validateBranch(b.branch, t.school);
-
       if (b.divisions?.length) {
         for (const d of b.divisions) {
           await validateDivision(d, b.branch);
@@ -1110,6 +1156,16 @@ const createEventDirector = asyncHandler(async (req, res) => {
       }
     }
   }
+
+  const year = new Date(startTime).getFullYear();
+
+  const existing = await Event.findOne({ name, year });
+
+  if (existing) {
+    throw new ApiError(400, `Event "${name}" already exists for year ${year}`);
+  }
+
+  let { level, status } = await determineEventLevel(parsedTargets);
 
   const uploadedEps = await uploadToCloudinaryBuffer(
     epsFile.buffer,
@@ -1137,6 +1193,8 @@ const createEventDirector = asyncHandler(async (req, res) => {
     venue,
     amount: amount || 0,
     status: "Approved",
+    level,
+    year,
   });
 
   res
@@ -1183,14 +1241,33 @@ const createEventClub = asyncHandler(async (req, res) => {
   const parsedTargets = JSON.parse(targets);
 
   for (const t of parsedTargets) {
+    await validateSchool(t.school);
+
     for (const b of t.branches) {
-      if (b.divisions && b.divisions.length > 0) {
-        throw new ApiError(
-          400,
-          "Club cannot create event for specific divisions",
-        );
+      if (b.StudentYear != null && (b.StudentYear < 1 || b.StudentYear > 5)) {
+        throw new ApiError(400, "Invalid StudentYear");
+      }
+      await validateBranch(b.branch, t.school);
+      if (b.divisions?.length) {
+        for (const d of b.divisions) {
+          await validateDivision(d, b.branch);
+        }
       }
     }
+  }
+
+  const year = new Date(startTime).getFullYear();
+
+  const existing = await Event.findOne({ name, year });
+
+  if (existing) {
+    throw new ApiError(400, `Event "${name}" already exists for year ${year}`);
+  }
+
+  let { level, status } = await determineEventLevel(parsedTargets);
+
+  if (level === "Division") {
+    throw new ApiError(404, "Club can not create division level event");
   }
 
   const uploadedEps = await uploadToCloudinaryBuffer(
@@ -1219,6 +1296,8 @@ const createEventClub = asyncHandler(async (req, res) => {
     venue,
     amount: amount || 0,
     status: "Pending",
+    level,
+    year,
   });
 
   res
@@ -1226,138 +1305,4 @@ const createEventClub = asyncHandler(async (req, res) => {
     .json(new ApiResponse(201, event, "Event created successfully"));
 });
 
-// common
-const modifyEventBeforeApproveCommon = asyncHandler(async (req, res) => {
-  if (!["Faculty", "HoD", "Dean", "Director", "Club"].includes(req.user.role)) {
-    throw new ApiError(403, "Unauthorized user");
-  }
-
-  const { eventId } = req.params;
-  const updates = req.body;
-
-  const event = await Event.findById(eventId);
-
-  if (!event) {
-    throw new ApiError(404, "Event not found");
-  }
-
-  if (event.organizedBy.toString() !== req.user._id.toString()) {
-    throw new ApiError(403, "You can only modify your own event");
-  }
-
-  if (event.status !== "Pending") {
-    throw new ApiError(400, "Approved events cannot be modified");
-  }
-
-  const allowedFields = [
-    "name",
-    "detail",
-    "photo",
-    "targets",
-    "startTime",
-    "endTime",
-    "registrationDeadline",
-    "venue",
-    "amount",
-  ];
-
-  for (const key of Object.keys(updates)) {
-    if (!allowedFields.includes(key)) {
-      throw new ApiError(400, `Field '${key}' cannot be updated`);
-    }
-  }
-
-  for (const key of Object.keys(updates)) {
-    event[key] = updates[key];
-  }
-
-  if (req.body.file?.photo) {
-    event.photo = req.body.file.photo;
-  }
-
-  if (req.body.file?.epsFile) {
-    event.epsFile = req.body.file.epsFile;
-  }
-
-  await event.save();
-
-  res
-    .status(200)
-    .json(new ApiResponse(200, { event }, "Event modified successfully"));
-});
-
-const modifyEventAfterApproveCommon = asyncHandler(async (req, res) => {
-  if (!["Faculty", "HoD", "Dean", "Director", "Club"].includes(req.user.role)) {
-    throw new ApiError(403, "Unauthorized user");
-  }
-
-  const { eventId } = req.params;
-  const updates = req.body;
-
-  const event = await Event.findById(eventId);
-
-  if (!event) {
-    throw new ApiError(404, "Event not found");
-  }
-
-  if (event.organizedBy.toString() !== req.user._id.toString()) {
-    throw new ApiError(403, "You can only modify your own event");
-  }
-
-  if (event.status !== "Approved") {
-    throw new ApiError(400, "Rejected events cannot be modified");
-  }
-
-  const allowedFields = [
-    "detail",
-    "startTime",
-    "endTime",
-    "registrationDeadline",
-    "venue",
-  ];
-
-  for (const key of Object.keys(updates)) {
-    if (!allowedFields.includes(key)) {
-      throw new ApiError(400, `Field '${key}' cannot be updated`);
-    }
-  }
-
-  for (const key of Object.keys(updates)) {
-    event[key] = updates[key];
-  }
-
-  await event.save();
-
-  res
-    .status(200)
-    .json(new ApiResponse(200, { event }, "Event modified successfully"));
-});
-
-const deleteEventCommon = asyncHandler(async (req, res) => {
-  if (!["Faculty", "HoD", "Dean", "Director", "Club"].includes(req.user.role)) {
-    throw new ApiError(404, "Unauthorized user");
-  }
-  const { eventId } = req.params;
-
-  if (!eventId) {
-    throw new ApiError(404, "Event ID not present");
-  }
-
-  const event = await Event.findById(eventId);
-
-  if (!event) {
-    throw new ApiError(404, "Event not found");
-  }
-
-  if (event.organizedBy.toString() !== req.user._id.toString()) {
-    throw new ApiError(404, "Only owner of this event can delete it");
-  }
-
-  if (event.status !== "Pending") {
-    throw new ApiError(404, "Only pending event can be deleted");
-  }
-
-  await event.deleteOne();
-
-  res.status(200).json(new ApiResponse(200, {}, "Event deleted successfully"));
-});
+export { determineEventLevel };
