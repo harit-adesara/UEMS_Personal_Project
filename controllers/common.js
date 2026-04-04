@@ -313,7 +313,11 @@ const getEventCommon = asyncHandler(async (req, res) => {
   if (req.query.name) {
     filter.name = req.query.name;
   }
-  const events = await Event.find(filter).sort({ startTime: -1 });
+
+  const sortOrder =
+    req.query.order === "asc" ? 1 : req.query.order === "desc" ? -1 : -1;
+
+  const events = await Event.find(filter).sort({ startTime: sortOrder });
   if (events.length === 0) {
     throw new ApiError(404, "Events not found");
   }
@@ -358,7 +362,10 @@ const myEvent = asyncHandler(async (req, res) => {
       filter.name = req.query.name;
     }
 
-    const event = await Event.find(filter).sort({ startTime: -1 });
+    const sortOrder =
+      req.query.order === "asc" ? 1 : req.query.order === "desc" ? -1 : -1;
+
+    const event = await Event.find(filter).sort({ startTime: sortOrder });
     if (!event.length) {
       throw new ApiError(404, "Event not found");
     }
@@ -435,7 +442,11 @@ const getEventApprovalOrReject = asyncHandler(async (req, res) => {
   if (req.query.name) {
     filter.name = req.query.name;
   }
-  const events = await Event.find(filter).sort({ startTime: -1 });
+
+  const sortOrder =
+    req.query.order === "asc" ? 1 : req.query.order === "desc" ? -1 : -1;
+
+  const events = await Event.find(filter).sort({ startTime: sortOrder });
   if (events.length === 0) {
     throw new ApiError(404, "Events not found");
   }

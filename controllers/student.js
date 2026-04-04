@@ -256,7 +256,10 @@ const eventListStudent = asyncHandler(async (req, res) => {
     },
   };
 
-  const events = await Event.find(filter).sort({ startTime: -1 });
+  const sortOrder =
+    req.query.order === "asc" ? 1 : req.query.order === "desc" ? -1 : -1;
+
+  const events = await Event.find(filter).sort({ startTime: sortOrder });
 
   if (!events.length)
     throw new ApiError(404, "No events found for your profile");
@@ -279,31 +282,39 @@ const myRegisteredEvent = asyncHandler(async (req, res) => {
   if (req.user.role !== "Student") {
     throw new ApiError(404, "Unauthorized user");
   }
-  let filter = { status: "Accepted", student: req.user.id };
 
-  if (req.query.date) {
-    const start = new Date(req.query.date);
-    const end = new Date(req.query.date);
-    end.setHours(23, 59, 59, 999);
-    filter.startTime = { $gte: start, $lte: end };
-  } else {
-    filter.startTime = { $gte: new Date() };
-  }
+  const sortOrder =
+    req.query.order === "asc" ? 1 : req.query.order === "desc" ? -1 : -1;
 
-  if (req.query.name) filter.name = { $regex: req.query.name, $options: "i" };
-  if (req.query.organizedBy)
-    filter.organizedBy = { $regex: req.query.organizedBy, $options: "i" };
-
-  const event = (await Registration.find(filter)).sort({
-    registeredAt: -1,
-  });
+  const event = await Registration.find({
+    student: req.user.id,
+  })
+    .populate({
+      path: "event",
+      match: {
+        ...(req.query.name && {
+          name: { $regex: req.query.name, $options: "i" },
+        }),
+        ...(req.query.organizedBy && {
+          organizedBy: { $regex: req.query.organizedBy, $options: "i" },
+        }),
+      },
+      select: "name organizedBy",
+    })
+    .sort({ registeredAt: sortOrder })
+    .limit(30);
 
   if (event.length === 0) {
     throw new ApiError(404, "Event not found");
   }
+  const filtered = event.filter((e) => e.event !== null).slice(0, 30);
+
+  if (!filtered.length) {
+    throw new ApiError(404, "Event not found");
+  }
   return res
     .status(200)
-    .json(new ApiResponse(200, { event }, "Event fetched successfully"));
+    .json(new ApiResponse(200, { filtered }, "Event fetched successfully"));
 });
 
 const getStudentAttendance = asyncHandler(async (req, res) => {
@@ -313,10 +324,45 @@ const getStudentAttendance = asyncHandler(async (req, res) => {
     throw new ApiError(403, "Unauthorized");
   }
 
-  const attendanceRecords = await Attendance.find(
+  const attendance = await Attendance.find(
     { "records.student": studentId },
     { "records.$": 1, event: 1 },
-  ).populate("event", "name date organizedBy");
+  ).populate({
+    path: "event",
+    match: {
+      ...(req.query.name && {
+        name: { $regex: req.query.name, $options: "i" },
+      }),
+      ...(req.query.organizedBy && {
+        organizedBy: { $regex: req.query.organizedBy, $options: "i" },
+      }),
+    },
+    select: "name date organizedBy",
+  });
 
-  res.status(200).json({ attendance });
+  if (!attendance) {
+    throw new ApiError(404, "Attendance not found");
+  }
+
+  const filtered = attendance.filter((a) => a.event !== null);
+
+  if (!filtered.length) {
+    throw new ApiError(404, "No attendance found");
+  }
+
+  res
+    .status(200)
+    .json(
+      new ApiResponse(200, { filtered }, "Attendance fetched successfully"),
+    );
 });
+
+export {
+  addFeedback,
+  markAttendanceQR,
+  registerInEvent,
+  eventListStudent,
+  viewEventDetail,
+  myRegisteredEvent,
+  getStudentAttendance,
+};

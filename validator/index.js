@@ -1,14 +1,5 @@
 import body from "express-validator";
 
-const roleRequirements = {
-  Student: ["roll_number", "division", "school", "branch", "year"],
-  HoD: ["branch"],
-  Dean: ["school"],
-  Director: [],
-  External: [],
-  Admin: [],
-};
-
 const register = () => {
   return [
     body("password")
@@ -489,4 +480,15 @@ const modifyEventAfterApproveValidator = () => {
       .trim()
       .withMessage("Venue must be a string"),
   ];
+};
+
+export {
+  register,
+  login,
+  createUserValidator,
+  modifyUserValidator,
+  modifyEventValidator,
+  createEventValidator,
+  modifyEventBeforeApproveValidator,
+  modifyEventAfterApproveValidator,
 };
