@@ -963,13 +963,9 @@ const createEventFaculty = asyncHandler(async (req, res) => {
     status = "Approved";
   }
 
-  const uploadedEps = await uploadToCloudinaryBuffer(
-    epsFile,
-    "events/eps",
-    "pdf",
-  );
+  const uploadedEps = await uploadToCloudinary(epsFile, "events/eps", "pdf");
   const uploadedPhoto = photo
-    ? await uploadToCloudinaryBuffer(photo, "events/photo", "image")
+    ? await uploadToCloudinary(photo, "events/photo", "image")
     : null;
 
   const event = await Event.create({
@@ -1061,17 +1057,11 @@ const createEventHoD = asyncHandler(async (req, res) => {
     status = "Approved";
   }
 
-  const uploadedEps = await uploadToCloudinaryBuffer(
-    epsFile.buffer,
-    "events/eps",
-  );
+  const uploadedEps = await uploadToCloudinary(epsFile.buffer, "events/eps");
 
   let uploadedPhoto = null;
   if (photo) {
-    uploadedPhoto = await uploadToCloudinaryBuffer(
-      photo.buffer,
-      "events/photo",
-    );
+    uploadedPhoto = await uploadToCloudinary(photo.buffer, "events/photo");
   }
 
   const event = await Event.create({
@@ -1167,17 +1157,11 @@ const createEventDean = asyncHandler(async (req, res) => {
     status = "Approved";
   }
 
-  const uploadedEps = await uploadToCloudinaryBuffer(
-    epsFile.buffer,
-    "events/eps",
-  );
+  const uploadedEps = await uploadToCloudinary(epsFile.buffer, "events/eps");
 
   let uploadedPhoto = null;
   if (photo) {
-    uploadedPhoto = await uploadToCloudinaryBuffer(
-      photo.buffer,
-      "events/photo",
-    );
+    uploadedPhoto = await uploadToCloudinary(photo.buffer, "events/photo");
   }
 
   const event = await Event.create({
@@ -1266,17 +1250,11 @@ const createEventDirector = asyncHandler(async (req, res) => {
 
   let { level, status } = await determineEventLevel(parsedTargets);
 
-  const uploadedEps = await uploadToCloudinaryBuffer(
-    epsFile.buffer,
-    "events/eps",
-  );
+  const uploadedEps = await uploadToCloudinary(epsFile.buffer, "events/eps");
 
   let uploadedPhoto = null;
   if (photo) {
-    uploadedPhoto = await uploadToCloudinaryBuffer(
-      photo.buffer,
-      "events/photo",
-    );
+    uploadedPhoto = await uploadToCloudinary(photo.buffer, "events/photo");
   }
 
   const event = await Event.create({
@@ -1369,17 +1347,11 @@ const createEventClub = asyncHandler(async (req, res) => {
     throw new ApiError(404, "Club can not create division level event");
   }
 
-  const uploadedEps = await uploadToCloudinaryBuffer(
-    epsFile.buffer,
-    "events/eps",
-  );
+  const uploadedEps = await uploadToCloudinary(epsFile.buffer, "events/eps");
 
   let uploadedPhoto = null;
   if (photo) {
-    uploadedPhoto = await uploadToCloudinaryBuffer(
-      photo.buffer,
-      "events/photo",
-    );
+    uploadedPhoto = await uploadToCloudinary(photo.buffer, "events/photo");
   }
 
   const event = await Event.create({

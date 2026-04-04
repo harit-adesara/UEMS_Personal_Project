@@ -18,6 +18,8 @@ import {
   validateBranch,
   validateDivision,
 } from "./function.js";
+import { uploadToCloudinary } from "../utils/uploadCloud.js";
+import cloudinary from "../db/cloudinary.js";
 
 const deleteFromCloudinary = async (public_id, type) => {
   if (!public_id) return;
