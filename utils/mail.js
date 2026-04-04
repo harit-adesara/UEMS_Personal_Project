@@ -46,7 +46,7 @@ const registerEmail = (username, passwordSetUrl) => {
       action: {
         instructions: "To set password click on the following button",
         button: {
-          color: "#b1b118",
+          color: "#2fe16a",
           text: "Set password",
           link: passwordSetUrl,
         },

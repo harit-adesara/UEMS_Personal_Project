@@ -15,14 +15,13 @@ const eventSchema = new Schema(
       trim: true,
     },
 
-    photo: {
-      type: String,
+    eps: {
+      url: { type: String, required: true },
+      public_id: { type: String, required: true },
     },
-
-    epsFile: {
-      type: String,
-      required: true,
-      trim: true,
+    photo: {
+      url: String,
+      public_id: String,
     },
 
     organizedBy: {

@@ -13,6 +13,19 @@ import { redis, storeToken, getToken } from "../db/redis.js";
 import { Attendance } from "../models/attendance.js";
 import { determineEventLevel } from "./function.js";
 import { Registration } from "../models/registration.js";
+import {
+  validateSchool,
+  validateBranch,
+  validateDivision,
+} from "./function.js";
+
+const deleteFromCloudinary = async (public_id, type) => {
+  if (!public_id) return;
+
+  const resource_type = type === "pdf" ? "raw" : "image";
+
+  await cloudinary.uploader.destroy(public_id, { resource_type });
+};
 
 const modifyEventBeforeApproveCommon = asyncHandler(async (req, res) => {
   if (!["Faculty", "HoD", "Dean", "Director", "Club"].includes(req.user.role)) {
@@ -38,12 +51,14 @@ const modifyEventBeforeApproveCommon = asyncHandler(async (req, res) => {
 
   if (updates.name) {
     const year = updates.startTime
-      ? updates.startTime.getFullYear()
+      ? new Date(updates.startTime).getFullYear()
       : event.startTime.getFullYear();
-    const name = updates.name ? updates.name : event.name;
+
+    const name = updates.name || event.name;
+
     const existing = await Event.findOne({ name, year });
 
-    if (existing) {
+    if (existing && existing._id.toString() !== eventId) {
       throw new ApiError(
         400,
         `Event "${name}" already exists for year ${year}`,
@@ -64,7 +79,9 @@ const modifyEventBeforeApproveCommon = asyncHandler(async (req, res) => {
         if (b.StudentYear != null && (b.StudentYear < 1 || b.StudentYear > 5)) {
           throw new ApiError(400, "Invalid StudentYear");
         }
+
         await validateBranch(b.branch, t.school);
+
         if (b.divisions?.length) {
           for (const d of b.divisions) {
             await validateDivision(d, b.branch);
@@ -75,30 +92,29 @@ const modifyEventBeforeApproveCommon = asyncHandler(async (req, res) => {
 
     ({ level, status } = await determineEventLevel(parsedTargets));
 
-    if (req.user.role === "Faculty" && ["Division"].includes(level))
+    if (req.user.role === "Faculty" && level === "Division")
       status = "Approved";
+
     if (req.user.role === "HoD" && ["Division", "School"].includes(level))
       status = "Approved";
+
     if (
       req.user.role === "Dean" &&
       ["Division", "School", "College"].includes(level)
     )
       status = "Approved";
-    if (req.user.role === "Club") {
-      parsedTargets.forEach((t) =>
-        t.branches.forEach((b) => {
-          if (b.divisions?.length)
-            throw new ApiError(400, "Club cannot create division-level events");
-        }),
-      );
+
+    if (req.user.role === "Club" && level === "Division") {
       status = "Pending";
+      throw new ApiError(404, "Club can not create division level event");
     }
+
+    updates.targets = parsedTargets;
   }
 
   const allowedFields = [
     "name",
     "detail",
-    "photo",
     "targets",
     "startTime",
     "endTime",
@@ -113,28 +129,63 @@ const modifyEventBeforeApproveCommon = asyncHandler(async (req, res) => {
     }
   }
 
-  for (const key of Object.keys(updates)) {
-    event[key] = updates[key];
+  const startTime = updates.startTime
+    ? new Date(updates.startTime)
+    : event.startTime;
+
+  const endTime = updates.endTime ? new Date(updates.endTime) : event.endTime;
+
+  const registrationDeadline = updates.registrationDeadline
+    ? new Date(updates.registrationDeadline)
+    : event.registrationDeadline;
+
+  if (endTime && startTime && endTime < startTime) {
+    throw new ApiError(400, "End time must be after start time");
   }
 
-  if (req.body.file?.photo) {
-    event.photo = req.body.file.photo;
+  if (registrationDeadline && startTime && registrationDeadline > startTime) {
+    throw new ApiError(400, "Registration deadline must be before start time");
   }
 
-  if (req.body.file?.epsFile) {
-    event.epsFile = req.body.file.epsFile;
+  for (const key of allowedFields) {
+    if (updates[key] !== undefined) {
+      event[key] = updates[key];
+    }
   }
 
-  if (level) {
-    event.level = level;
+  const photoFile = req.files?.photo?.[0];
+  const epsFile = req.files?.eps?.[0];
+
+  if (photoFile) {
+    const uploadedPhoto = await uploadToCloudinary(
+      photoFile,
+      "events/photo",
+      "image",
+    );
+
+    if (event.photo?.public_id) {
+      await deleteFromCloudinary(event.photo.public_id, "image");
+    }
+
+    event.photo = uploadedPhoto;
   }
-  if (status) {
-    event.status = status;
+
+  if (epsFile) {
+    const uploadedEps = await uploadToCloudinary(epsFile, "events/eps", "pdf");
+
+    if (event.eps?.public_id) {
+      await deleteFromCloudinary(event.eps.public_id, "pdf");
+    }
+
+    event.eps = uploadedEps;
   }
+
+  if (level) event.level = level;
+  if (status) event.status = status;
 
   await event.save();
 
-  res
+  return res
     .status(200)
     .json(new ApiResponse(200, { event }, "Event modified successfully"));
 });
@@ -173,6 +224,24 @@ const modifyEventAfterApproveCommon = asyncHandler(async (req, res) => {
     if (!allowedFields.includes(key)) {
       throw new ApiError(400, `Field '${key}' cannot be updated`);
     }
+  }
+
+  const startTime = updates.startTime
+    ? new Date(updates.startTime)
+    : event.startTime;
+
+  const endTime = updates.endTime ? new Date(updates.endTime) : event.endTime;
+
+  const registrationDeadline = updates.registrationDeadline
+    ? new Date(updates.registrationDeadline)
+    : event.registrationDeadline;
+
+  if (endTime && startTime && endTime < startTime) {
+    throw new ApiError(400, "End time must be after start time");
+  }
+
+  if (registrationDeadline && startTime && registrationDeadline > startTime) {
+    throw new ApiError(400, "Registration deadline must be before start time");
   }
 
   for (const key of Object.keys(updates)) {

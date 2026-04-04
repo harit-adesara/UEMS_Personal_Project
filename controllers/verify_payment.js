@@ -2,6 +2,7 @@ import { ApiResponse } from "../utils/api_response.js";
 import { ApiError } from "../utils/api_error.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { Registration } from "../models/registration.js";
+import { Attendance } from "../models/attendance.js";
 
 export const verifyPayment = asyncHandler(async (req, res) => {
   const { razorpayOrderId, razorpayPaymentId, signature, eventId } = req.body;

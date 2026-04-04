@@ -7,6 +7,9 @@ import { Branch } from "../models/branch.js";
 import { School } from "../models/school.js";
 import { Division } from "../models/division.js";
 import { registerEmail, sendEmail } from "../utils/mail.js";
+import { deleteFromCloudinary } from "./common.js";
+import { uploadToCloudinary } from "../utils/uploadCloud.js";
+import cloudinary from "../db/cloudinary.js";
 
 // admin funtionality
 
@@ -335,9 +338,16 @@ const deleteUser = asyncHandler(async (req, res) => {
   res.status(200).json(new ApiResponse(200, {}, "User deleted successfully"));
 });
 
+const deleteFromCloudinary = async (public_id, type) => {
+  if (!public_id) return;
+
+  const resource_type = type === "pdf" ? "raw" : "image";
+  await cloudinary.uploader.destroy(public_id, { resource_type });
+};
+
 const modifyEvent = asyncHandler(async (req, res) => {
   if (req.user.role !== "Admin") {
-    throw new ApiError(404, "Unauthorized user");
+    throw new ApiError(403, "Unauthorized user");
   }
 
   const { eventId, ...updates } = req.body;
@@ -347,7 +357,6 @@ const modifyEvent = asyncHandler(async (req, res) => {
   }
 
   const event = await Event.findById(eventId);
-
   if (!event) {
     throw new ApiError(404, "Event not found");
   }
@@ -357,8 +366,6 @@ const modifyEvent = asyncHandler(async (req, res) => {
   const allowedFields = [
     "name",
     "detail",
-    "photo",
-    "epsFile",
     "targets",
     "startTime",
     "endTime",
@@ -377,10 +384,69 @@ const modifyEvent = asyncHandler(async (req, res) => {
     }
   }
 
-  const newStart = updates.startTime || event.startTime;
-  const newEnd = updates.endTime || event.endTime;
-  const newDeadline =
-    updates.registrationDeadline || event.registrationDeadline;
+  if (updates.name) {
+    const year = updates.startTime
+      ? new Date(updates.startTime).getFullYear()
+      : event.startTime.getFullYear();
+
+    const name = updates.name || event.name;
+
+    const existing = await Event.findOne({ name, year });
+
+    if (existing && existing._id.toString() !== eventId) {
+      throw new ApiError(
+        400,
+        `Event "${name}" already exists for year ${year}`,
+      );
+    }
+  }
+
+  let level = "";
+  let status = "";
+
+  if (updates.targets) {
+    const parsedTargets = JSON.parse(updates.targets);
+
+    for (const t of parsedTargets) {
+      await validateSchool(t.school);
+
+      for (const b of t.branches) {
+        if (b.StudentYear != null && (b.StudentYear < 1 || b.StudentYear > 5)) {
+          throw new ApiError(400, "Invalid StudentYear");
+        }
+
+        await validateBranch(b.branch, t.school);
+
+        if (b.divisions?.length) {
+          for (const d of b.divisions) {
+            await validateDivision(d, b.branch);
+          }
+        }
+      }
+    }
+
+    ({ level, status } = await determineEventLevel(parsedTargets));
+
+    const organizer = await User.findById(event.organizedBy).select("role");
+
+    if (organizer.role === "Club" && level === "Division") {
+      throw new ApiError(
+        400,
+        "Club cannot create or modify to division level event",
+      );
+    }
+    updates.targets = parsedTargets;
+  }
+
+  const newStart = updates.startTime
+    ? new Date(updates.startTime)
+    : event.startTime;
+
+  const newEnd = updates.endTime ? new Date(updates.endTime) : event.endTime;
+
+  const newDeadline = updates.registrationDeadline
+    ? new Date(updates.registrationDeadline)
+    : event.registrationDeadline;
 
   if (newEnd && newEnd < newStart) {
     throw new ApiError(400, "End time must be after start time");
@@ -394,13 +460,45 @@ const modifyEvent = asyncHandler(async (req, res) => {
     throw new ApiError(400, "Amount cannot be negative");
   }
 
-  for (const key of Object.keys(updates)) {
-    event[key] = updates[key];
+  allowedFields.forEach((key) => {
+    if (updates[key] !== undefined) {
+      event[key] = updates[key];
+    }
+  });
+
+  const photoFile = req.files?.photo?.[0];
+  const epsFile = req.files?.eps?.[0];
+
+  if (photoFile) {
+    const uploadedPhoto = await uploadToCloudinary(
+      photoFile,
+      "events/photo",
+      "image",
+    );
+
+    if (event.photo?.public_id) {
+      await deleteFromCloudinary(event.photo.public_id, "image");
+    }
+
+    event.photo = uploadedPhoto;
   }
+
+  if (epsFile) {
+    const uploadedEps = await uploadToCloudinary(epsFile, "events/eps", "pdf");
+
+    if (event.eps?.public_id) {
+      await deleteFromCloudinary(event.eps.public_id, "pdf");
+    }
+
+    event.eps = uploadedEps;
+  }
+
+  if (level) event.level = level;
+  if (status) event.status = status;
 
   await event.save();
 
-  res
+  return res
     .status(200)
     .json(new ApiResponse(200, event, "Event updated successfully"));
 });
@@ -866,17 +964,18 @@ const createEventFaculty = asyncHandler(async (req, res) => {
   }
 
   const uploadedEps = await uploadToCloudinaryBuffer(
-    epsFile.buffer,
+    epsFile,
     "events/eps",
+    "pdf",
   );
   const uploadedPhoto = photo
-    ? await uploadToCloudinaryBuffer(photo.buffer, "events/photo")
-    : undefined;
+    ? await uploadToCloudinaryBuffer(photo, "events/photo", "image")
+    : null;
 
   const event = await Event.create({
     name,
     detail,
-    photo: uploadedPhoto || undefined,
+    ...(uploadedPhoto && { photo: uploadedPhoto }),
     epsFile: uploadedEps,
     organizedBy: req.user._id,
     targets: parsedTargets,
@@ -967,7 +1066,7 @@ const createEventHoD = asyncHandler(async (req, res) => {
     "events/eps",
   );
 
-  let uploadedPhoto;
+  let uploadedPhoto = null;
   if (photo) {
     uploadedPhoto = await uploadToCloudinaryBuffer(
       photo.buffer,
@@ -978,7 +1077,7 @@ const createEventHoD = asyncHandler(async (req, res) => {
   const event = await Event.create({
     name,
     detail,
-    photo: uploadedPhoto || undefined,
+    ...(uploadedPhoto && { photo: uploadedPhoto }),
     epsFile: uploadedEps,
     organizedBy: req.user._id,
     targets: parsedTargets,
@@ -1073,7 +1172,7 @@ const createEventDean = asyncHandler(async (req, res) => {
     "events/eps",
   );
 
-  let uploadedPhoto;
+  let uploadedPhoto = null;
   if (photo) {
     uploadedPhoto = await uploadToCloudinaryBuffer(
       photo.buffer,
@@ -1084,7 +1183,7 @@ const createEventDean = asyncHandler(async (req, res) => {
   const event = await Event.create({
     name,
     detail,
-    photo: uploadedPhoto || undefined,
+    ...(uploadedPhoto && { photo: uploadedPhoto }),
     epsFile: uploadedEps,
     organizedBy: req.user._id,
     targets: parsedTargets,
@@ -1172,7 +1271,7 @@ const createEventDirector = asyncHandler(async (req, res) => {
     "events/eps",
   );
 
-  let uploadedPhoto;
+  let uploadedPhoto = null;
   if (photo) {
     uploadedPhoto = await uploadToCloudinaryBuffer(
       photo.buffer,
@@ -1183,7 +1282,7 @@ const createEventDirector = asyncHandler(async (req, res) => {
   const event = await Event.create({
     name,
     detail,
-    photo: uploadedPhoto || undefined,
+    ...(uploadedPhoto && { photo: uploadedPhoto }),
     epsFile: uploadedEps,
     organizedBy: req.user._id,
     targets: parsedTargets,
@@ -1275,7 +1374,7 @@ const createEventClub = asyncHandler(async (req, res) => {
     "events/eps",
   );
 
-  let uploadedPhoto;
+  let uploadedPhoto = null;
   if (photo) {
     uploadedPhoto = await uploadToCloudinaryBuffer(
       photo.buffer,
@@ -1286,7 +1385,7 @@ const createEventClub = asyncHandler(async (req, res) => {
   const event = await Event.create({
     name,
     detail,
-    photo: uploadedPhoto || undefined,
+    ...(uploadedPhoto && { photo: uploadedPhoto }),
     epsFile: uploadedEps,
     organizedBy: req.user._id,
     targets: parsedTargets,
