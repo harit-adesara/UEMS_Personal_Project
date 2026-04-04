@@ -610,6 +610,11 @@ const getRegisteredStudents = asyncHandler(async (req, res) => {
     throw new ApiError(403, "Unauthorized");
   }
 
+  event.sort((a, b) => {
+    if (!a.student || !b.student) return 0;
+    return a.student.roll_number.localeCompare(b.student.roll_number);
+  });
+
   res
     .status(200)
     .json(
@@ -619,10 +624,9 @@ const getRegisteredStudents = asyncHandler(async (req, res) => {
 
 const getStudentAttendanceList = asyncHandler(async (req, res) => {
   const { eventId } = req.params;
-  const record = await Attendance.findOne({ event: eventId }).populate(
-    "event",
-    "name organizedBy",
-  );
+  const record = await Attendance.findOne({ event: eventId })
+    .populate("event", "name organizedBy")
+    .populate("records.student", "roll_number");
 
   if (
     req.user.role !== "Admin" &&
@@ -633,6 +637,14 @@ const getStudentAttendanceList = asyncHandler(async (req, res) => {
   if (!record) {
     throw new ApiError(404, "Attendance not found");
   }
+
+  if (record) {
+    record.records.sort((a, b) => {
+      if (!a.student || !b.student) return 0;
+      return a.student.roll_number.localeCompare(b.student.roll_number);
+    });
+  }
+
   return res.status(200).json(new ApiResponse(200, { record }));
 });
 

@@ -9,6 +9,7 @@ export const verifyPayment = asyncHandler(async (req, res) => {
   const registration = await Registration.findOne({
     user: req.user._id,
     event: eventId,
+    razorpayOrderId: razorpayOrderId,
   });
 
   if (!registration) {

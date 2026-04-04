@@ -241,11 +241,15 @@ const eventListStudent = asyncHandler(async (req, res) => {
       school,
       branches: {
         $elemMatch: {
-          branch,
-          $or: [{ StudentYear: year }, { StudentYear: null }],
-          $or: [
-            { divisions: { $exists: false } },
-            { divisions: { $in: [division] } },
+          $and: [
+            { branch: { $in: [branch, null] } },
+            { StudentYear: { $in: [year, null] } },
+            {
+              $or: [
+                { divisions: { $size: 0 } },
+                { divisions: { $in: [division] } },
+              ],
+            },
           ],
         },
       },
