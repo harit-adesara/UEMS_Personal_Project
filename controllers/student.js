@@ -11,6 +11,7 @@ import { registerEmail, sendEmail } from "../utils/mail.js";
 import { redis, storeToken, getToken } from "../db/redis.js";
 import { Attendance } from "../models/attendance.js";
 import { Registration } from "../models/registration.js";
+import mongoose from "mongoose";
 
 const addFeedback = asyncHandler(async (req, res) => {
   if (req.user.role !== "Student") {
@@ -113,90 +114,81 @@ const markAttendanceQR = asyncHandler(async (req, res) => {
 });
 
 const registerInEvent = asyncHandler(async (req, res) => {
-  try {
-    if (req.user.role !== "Student") {
-      throw new ApiError(404, "Unauthorized user");
-    }
-    const { eventId } = req.params;
-    const event = await Event.findById(eventId);
-    if (!event) {
-      throw new ApiError(404, "Event not found");
-    }
-    if (event.status !== "Accepted") {
-      throw new ApiError(404, "Event is not accepted yet");
-    }
-    const existing = await Registration.findOne({
-      user: req.user._id,
-      event: eventId,
+  if (req.user.role !== "Student") {
+    throw new ApiError(404, "Unauthorized user");
+  }
+
+  const { eventId } = req.params;
+
+  const event = await Event.findById(eventId);
+  if (!event) throw new ApiError(404, "Event not found");
+  if (event.status !== "Accepted") {
+    throw new ApiError(404, "Event is not accepted yet");
+  }
+
+  let order = null;
+  if (event.amount > 0) {
+    order = await razorpay.orders.create({
+      amount: event.amount * 100,
+      currency: "INR",
+      receipt: `rec_${req.user._id.toString().slice(-8)}_${eventId
+        .toString()
+        .slice(-8)}`,
     });
-    if (existing) {
-      throw new ApiError(404, "User already registerd");
-    }
-    if (event.amount === 0) {
-      const registration = await Registration.create({
-        event: eventId,
-        student: req.user._id,
-        school: req.user.school,
-        branch: req.user.branch,
-        division: req.user.division,
-        paid: true,
-        registeredAt: new Date(),
-      });
+  }
 
-      let attendanceDoc = await Attendance.findOne({ event: eventId });
+  const session = await mongoose.startSession();
+  session.startTransaction();
 
-      if (!attendanceDoc) {
-        attendanceDoc = await Attendance.create({
+  try {
+    const [registration] = await Registration.create(
+      [
+        {
           event: eventId,
-          records: [
-            {
-              student: req.user.id,
+          student: req.user._id,
+          school: req.user.school,
+          branch: req.user.branch,
+          division: req.user.division,
+          paid: event.amount === 0,
+          razorpayOrderId: order ? order.id : null,
+          registeredAt: new Date(),
+        },
+      ],
+      { session },
+    );
+
+    if (event.amount === 0) {
+      await Attendance.updateOne(
+        { event: eventId },
+        {
+          $setOnInsert: { event: eventId },
+          $addToSet: {
+            records: {
+              student: req.user._id,
               school: req.user.school,
               branch: req.user.branch,
               division: req.user.division || null,
               status: "Absent",
             },
-          ],
-        });
-      } else {
-        const exists = attendanceDoc.records.some(
-          (r) => r.student.toString() === req.user.id.toString(),
-        );
-        if (!exists) {
-          attendanceDoc.records.push({
-            student: req.user.id,
-            school: req.user.school,
-            branch: req.user.branch,
-            division: req.user.division || null,
-            status: "Absent",
-          });
-          await attendanceDoc.save();
-        }
-      }
+          },
+        },
+        { upsert: true, session },
+      );
+    }
+
+    await session.commitTransaction();
+
+    if (event.amount === 0) {
       return res
         .status(200)
         .json(
           new ApiResponse(
             200,
             { isPaid: false, registration },
-            "Registation done",
+            "Registration done",
           ),
         );
     }
-    const order = await razorpayInstance.orders.create({
-      amount: event.amount * 100,
-      currency: "INR",
-      receipt: `rec_${req.user._id.toString().slice(-8)}_${eventId.toString().slice(-8)}`,
-    });
-
-    await Registration.create({
-      event: eventId,
-      user: req.user._id,
-      school: req.user.school,
-      branch: req.user.branch,
-      division: req.user.division,
-      razorpayOrderId: order.id,
-    });
 
     return res.status(200).json(
       new ApiResponse(200, {
@@ -209,8 +201,15 @@ const registerInEvent = asyncHandler(async (req, res) => {
       }),
     );
   } catch (error) {
-    console.log(error);
-    throw new ApiError(404, "Error while registration");
+    await session.abortTransaction();
+
+    if (error.code === 11000) {
+      throw new ApiError(400, "User already registered");
+    }
+
+    throw error;
+  } finally {
+    session.endSession();
   }
 });
 
