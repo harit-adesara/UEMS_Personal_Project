@@ -1,38 +1,60 @@
 import rateLimit from "express-rate-limit";
+import User from "../models/user.model.js";
 
-const ipLimiter = rateLimit({
-  windowMs: 2 * 60 * 60 * 1000,
-  max: 20,
-  message: {
-    success: false,
-    message: "Too many request try again later",
-  },
+export const attachUser = async (req, res, next) => {
+  if (req.user) {
+    req._user = req.user;
+    req._userChecked = true;
+    return next();
+  }
+
+  const email = req.body.email;
+  if (!email) return next();
+
+  if (!req._userChecked) {
+    req._user = await User.findOne({ email }).select("_id email password");
+    req._userChecked = true;
+  }
+  next();
+};
+
+export const ipLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 50,
   standardHeaders: true,
   legacyHeaders: false,
+  message: {
+    success: false,
+    message: "Too many requests, try again later",
+  },
 });
 
-const emailLimit = rateLimit({
-  windowMs: 1 * 60 * 60 * 1000,
+export const knownEmailLimiter = rateLimit({
+  windowMs: 30 * 60 * 1000,
   max: 5,
-  message: {
-    success: false,
-    message: "Too many login request try again later",
-  },
   standardHeaders: true,
   legacyHeaders: false,
-  keyGenerator: (req) => req.body.email,
-});
+  keyGenerator: (req) => `email-${req.body.email}`,
 
-const resendLimit = rateLimit({
-  windowMs: 1 * 60 * 60 * 1000,
-  max: 3,
+  skip: (req) => !req._user || !!req.user,
+
   message: {
     success: false,
-    message: "Too many email request try again later",
+    message: "Too many login attempts for this account",
   },
-  standardHeaders: true,
-  legacyHeaders: false,
-  keyGenerator: (req) => req.body.email,
 });
 
-export { ipLimiter, emailLimit, resendLimit };
+export const unknownEmailLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => req.ip,
+
+  skip: (req) => !!req._user || !!req.user,
+
+  message: {
+    success: false,
+    message: "Too many invalid attempts, try later",
+  },
+});
