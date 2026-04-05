@@ -538,6 +538,10 @@ const startAttendance = asyncHandler(async (req, res) => {
     throw new ApiError(404, "Event is not accepted");
   }
 
+  if (event.organizedBy.toString() !== req.user.id.toString()) {
+    throw new ApiError(404, "You are not owner of this event");
+  }
+
   let attendance = await Attendance.findOne({ event: eventId });
   if (!attendance) {
     throw new ApiError(404, "Event not found");
@@ -573,6 +577,29 @@ const getCurrentToken = asyncHandler(async (req, res) => {
   }
 
   res.json({ token });
+});
+
+const generateNewQrAttendance = asyncHandler(async (req, res) => {
+  const { eventId } = req.body;
+
+  const event = await Event.findById(eventId);
+  if (!event) {
+    throw new ApiError(404, "Event not exsits");
+  }
+  if (event.status !== "Accepted") {
+    throw new ApiError(404, "Event is not accepted");
+  }
+
+  if (event.organizedBy.toString() !== req.user.id.toString()) {
+    throw new ApiError(404, "You are not owner of this event");
+  }
+
+  let attendance = await Attendance.findOne({ event: eventId });
+  if (!attendance) {
+    throw new ApiError(404, "Event not found");
+  }
+
+  const result = await redis.del("myKey");
 });
 
 const manualMarkAttendance = asyncHandler(async (req, res) => {
