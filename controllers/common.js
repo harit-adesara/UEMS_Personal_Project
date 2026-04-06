@@ -409,18 +409,30 @@ const getEventFeedbackCommon = asyncHandler(async (req, res) => {
 
 const getEventApprovalOrReject = asyncHandler(async (req, res) => {
   if (
-    req.user.role !== "HoD" ||
-    req.user.role !== "Dean" ||
+    req.user.role !== "HoD" &&
+    req.user.role !== "Dean" &&
     req.user.role !== "Director"
   ) {
-    throw new ApiError(404, "Unauthorized user");
+    throw new ApiError(403, "Unauthorized user");
   }
 
   let filter = {};
   if (req.user.role === "HoD") {
     filter.level = "Branch";
+    filter.targets = {
+      $elemMatch: {
+        branches: {
+          $elemMatch: { branch: req.user.branch },
+        },
+      },
+    };
   } else if (req.user.role === "Dean") {
     filter.level = "School";
+    filter.targets = {
+      $elemMatch: {
+        school: req.user.school,
+      },
+    };
   } else if (req.user.role === "Director") {
     filter.level = "College";
   }
@@ -458,11 +470,11 @@ const getEventApprovalOrReject = asyncHandler(async (req, res) => {
 const eventStatusApprove = asyncHandler(async (req, res) => {
   try {
     if (
-      req.user.role !== "HoD" ||
-      req.user.role !== "Dean" ||
+      req.user.role !== "HoD" &&
+      req.user.role !== "Dean" &&
       req.user.role !== "Director"
     ) {
-      throw new ApiError(404, "Unauthorized user");
+      throw new ApiError(403, "Unauthorized user");
     }
     const { eventId } = req.params;
     const { reason } = req.body;
@@ -476,6 +488,7 @@ const eventStatusApprove = asyncHandler(async (req, res) => {
     if (event.status === "Approved" || event.status === "Rejected") {
       throw new ApiError(404, "You can not modify event");
     }
+
     event.status = "Approved";
     event.approvalHistory.push({
       user: req.user._id,
@@ -494,8 +507,8 @@ const eventStatusApprove = asyncHandler(async (req, res) => {
 const eventStatusReject = asyncHandler(async (req, res) => {
   try {
     if (
-      req.user.role !== "HoD" ||
-      req.user.role !== "Dean" ||
+      req.user.role !== "HoD" &&
+      req.user.role !== "Dean" &&
       req.user.role !== "Director"
     ) {
       throw new ApiError(404, "Unauthorized user");
