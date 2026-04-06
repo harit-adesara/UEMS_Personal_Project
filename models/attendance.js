@@ -7,7 +7,6 @@ const attendanceSchema = new Schema(
       type: Schema.Types.ObjectId,
       ref: "Event",
       required: true,
-      unique: true,
     },
 
     records: [

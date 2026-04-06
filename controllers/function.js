@@ -7,7 +7,6 @@ import { Branch } from "../models/branch.js";
 import { School } from "../models/school.js";
 import { Division } from "../models/division.js";
 import { registerEmail, sendEmail } from "../utils/mail.js";
-import { deleteFromCloudinary } from "./common.js";
 import { uploadToCloudinary } from "../utils/uploadCloud.js";
 import cloudinary from "../db/cloudinary.js";
 
@@ -849,6 +848,9 @@ const deleteSchool = asyncHandler(async (req, res) => {
 });
 
 export {
+  validateSchool,
+  validateBranch,
+  validateDivision,
   createUser,
   eventStatusApprove,
   eventStatusReject,

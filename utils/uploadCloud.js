@@ -1,4 +1,4 @@
-import cloudinary from "../config/cloudinary.js";
+import cloudinary from "../db/cloudinary.js";
 import { ApiError } from "./api_error.js";
 
 export const uploadToCloudinary = (file, folder, type) => {

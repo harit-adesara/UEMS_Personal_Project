@@ -5,7 +5,6 @@ import { User } from "../models/user.js";
 import { Event } from "../models/event.js";
 import { Branch } from "../models/branch.js";
 import { School } from "../models/school.js";
-import { Event } from "../models/event.js";
 import { Feedback } from "../models/feedback.js";
 import { Division } from "../models/division.js";
 import { registerEmail, sendEmail } from "../utils/mail.js";
@@ -467,7 +466,7 @@ const getEventApprovalOrReject = asyncHandler(async (req, res) => {
     .json(new ApiResponse(200, { events }, "Event fetched successfully"));
 });
 
-const eventStatusApprove = asyncHandler(async (req, res) => {
+const eventStatusApproveCommon = asyncHandler(async (req, res) => {
   try {
     if (
       req.user.role !== "HoD" &&
@@ -504,7 +503,7 @@ const eventStatusApprove = asyncHandler(async (req, res) => {
   }
 });
 
-const eventStatusReject = asyncHandler(async (req, res) => {
+const eventStatusRejectCommon = asyncHandler(async (req, res) => {
   try {
     if (
       req.user.role !== "HoD" &&
@@ -625,10 +624,10 @@ const manualMarkAttendance = asyncHandler(async (req, res) => {
 
 const getRegisteredStudents = asyncHandler(async (req, res) => {
   const { eventId } = req.params;
-  const event = await Registration.find({ event: eventId }).populate(
-    "student",
-    "fullname roll_number division",
-  );
+  const event = await Registration.find({
+    event: eventId,
+    paid: true,
+  }).populate("student", "fullname roll_number division");
   if (!event) throw new ApiError(404, "Event not found");
 
   if (
@@ -684,8 +683,8 @@ export {
   myEvent,
   getEventFeedbackCommon,
   getEventApprovalOrReject,
-  eventStatusApprove,
-  eventStatusReject,
+  eventStatusApproveCommon,
+  eventStatusRejectCommon,
   startAttendance,
   getCurrentToken,
   manualMarkAttendance,

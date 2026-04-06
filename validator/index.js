@@ -1,6 +1,6 @@
 import body from "express-validator";
 
-const register = () => {
+const registerval = () => {
   return [
     body("password")
       .trim()
@@ -10,7 +10,7 @@ const register = () => {
   ];
 };
 
-const login = () => {
+const loginval = () => {
   return [
     body("email")
       .trim()
@@ -483,8 +483,8 @@ const modifyEventAfterApproveValidator = () => {
 };
 
 export {
-  register,
-  login,
+  registerval,
+  loginval,
   createUserValidator,
   modifyUserValidator,
   modifyEventValidator,

@@ -3,6 +3,7 @@ const app = express();
 import cookieParser from "cookie-parser";
 import { router } from "./routes/routes.js";
 import cors from "cors";
+import { ipLimiter } from "./rate-limit/rate_limit.js";
 
 app.use(
   cors({
@@ -12,6 +13,8 @@ app.use(
     allowedHeaders: ["Content-type", "Authorization"],
   }),
 );
+
+app.use(ipLimiter);
 
 app.use(express.json());
 
