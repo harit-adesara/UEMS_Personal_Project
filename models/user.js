@@ -42,7 +42,8 @@ const userSchema = new Schema(
       },
     },
     division: {
-      type: String,
+      type: Schema.Types.ObjectId,
+      ref: "Division",
       required: function () {
         return this.role === "Student";
       },

@@ -10,31 +10,82 @@ import { registerEmail, sendEmail } from "../utils/mail.js";
 import { uploadToCloudinary } from "../utils/uploadCloud.js";
 import cloudinary from "../db/cloudinary.js";
 
-// admin funtionality
-
-const validateSchool = async (schoolId) => {
-  const school = await School.findById(schoolId);
-  if (!school || school.isDeleted) throw new ApiError(400, "Invalid school");
-  return school;
+const validateSchool = async (school) => {
+  if (!school) return null;
+  const query = mongoose.Types.ObjectId.isValid(school)
+    ? { _id: school }
+    : { name: school };
+  const schoolObj = await School.findOne(query);
+  if (!schoolObj || schoolObj.isDeleted) {
+    throw new ApiError(400, "Invalid school");
+  }
+  return schoolObj._id;
 };
 
-const validateBranch = async (branchId, schoolId = null) => {
-  if (!branchId) return null;
-  const branch = await Branch.findById(branchId);
-  if (!branch || branch.isDeleted) throw new ApiError(400, "Invalid branch");
-  if (schoolId && branch.school.toString() !== schoolId.toString())
-    throw new ApiError(400, "Branch does not belong to given school");
-  return branch;
+const validateBranch = async (branch, school = null) => {
+  if (!branch) return null;
+
+  const branchObj = await Branch.findOne({ name: branch }).populate(
+    "school",
+    "name",
+  );
+
+  if (!branchObj || branchObj.isDeleted)
+    throw new ApiError(400, "Invalid branch");
+
+  if (school) {
+    let schoolName = school;
+
+    // If school is ObjectId → fetch its name
+    if (mongoose.Types.ObjectId.isValid(school)) {
+      const schoolObj = await School.findById(school);
+      if (!schoolObj) throw new ApiError(400, "Invalid school");
+      schoolName = schoolObj.name;
+    }
+
+    if (branchObj.school.name !== schoolName) {
+      throw new ApiError(400, "Branch does not belong to given school");
+    }
+  }
+
+  return branchObj._id;
 };
 
-const validateDivision = async (divisionId, branchId = null) => {
-  if (!divisionId) return null;
-  const division = await Division.findById(divisionId);
-  if (!division || division.isDeleted)
+const validateDivision = async (division, branch = null) => {
+  if (!division) return null;
+
+  // Resolve division (name OR id)
+  const query = mongoose.Types.ObjectId.isValid(division)
+    ? { _id: division }
+    : { name: division };
+
+  const divisionObj = await Division.findOne(query);
+
+  if (!divisionObj || divisionObj.isDeleted) {
     throw new ApiError(400, "Invalid division");
-  if (branchId && division.branch.toString() !== branchId.toString())
+  }
+
+  // Normalize branch → ObjectId
+  let branchId = null;
+
+  if (branch) {
+    if (mongoose.Types.ObjectId.isValid(branch)) {
+      branchId = branch.toString();
+    } else {
+      const branchObj = await Branch.findOne({ name: branch });
+      if (!branchObj || branchObj.isDeleted) {
+        throw new ApiError(400, "Invalid branch");
+      }
+      branchId = branchObj._id.toString();
+    }
+  }
+
+  // Validate relation
+  if (branchId && divisionObj.branch.toString() !== branchId) {
     throw new ApiError(400, "Division does not belong to given branch");
-  return division;
+  }
+
+  return divisionObj._id;
 };
 
 const createUser = asyncHandler(async (req, res) => {
@@ -42,7 +93,7 @@ const createUser = asyncHandler(async (req, res) => {
     throw new ApiError(403, "Unauthorized user");
   }
 
-  const { fullname, email, role, roll_number, division, school, branch, year } =
+  let { fullname, email, role, roll_number, division, school, branch, year } =
     req.body;
 
   const password = process.env.temp_password;
@@ -68,9 +119,9 @@ const createUser = asyncHandler(async (req, res) => {
     throw new ApiError(400, "School required for Dean");
   }
 
-  if (school) await validateSchool(school);
-  if (branch) await validateBranch(branch, school);
-  if (division) await validateDivision(division, branch);
+  if (school) school = await validateSchool(school);
+  if (branch) branch = await validateBranch(branch, school);
+  if (division) division = await validateDivision(division, branch);
 
   let user = await User.findOne({ email });
 
@@ -126,7 +177,9 @@ const createUser = asyncHandler(async (req, res) => {
     ),
   });
 
-  res.status(201).json(new ApiResponse(201, user, "User created successfully"));
+  return res
+    .status(201)
+    .json(new ApiResponse(201, user, "User created successfully"));
 });
 
 const getEvent = asyncHandler(async (req, res) => {
@@ -174,11 +227,14 @@ const getEvent = asyncHandler(async (req, res) => {
 const getUser = asyncHandler(async (req, res) => {
   try {
     const { email } = req.body;
-    const user = await User.findOne({ email });
+    const user = await User.findOne({ email })
+      .populate("Division", "name")
+      .populate("Branch", "name")
+      .populate("School", "name");
     if (!user) {
       throw new ApiError(404, "User not found");
     }
-    res
+    return res
       .status(200)
       .json(new ApiResponse(200, { user }, "User fetched successfully"));
   } catch (error) {
@@ -249,10 +305,10 @@ const modifyUser = asyncHandler(async (req, res) => {
     throw new ApiError(403, "Unauthorized user");
   }
 
-  const { email, ...updates } = req.body;
-  if (!email) throw new ApiError(400, "Email is required to identify user");
+  const { userId, ...updates } = req.body;
+  if (!userId) throw new ApiError(400, "user id is required to identify user");
 
-  const user = await User.findOne({ email });
+  const user = await User.findById(userId);
   if (!user) throw new ApiError(404, "User not found");
 
   const allowedFields = [
@@ -271,11 +327,17 @@ const modifyUser = asyncHandler(async (req, res) => {
     }
   }
 
-  if (updates.school) await validateSchool(updates.school);
+  if (updates.school) updates.school = await validateSchool(updates.school);
   if (updates.branch)
-    await validateBranch(updates.branch, updates.school || user.school);
+    updates.branch = await validateBranch(
+      updates.branch,
+      updates.school || user.school,
+    );
   if (updates.division)
-    await validateDivision(updates.division, updates.branch || user.branch);
+    updates.division = await validateDivision(
+      updates.division,
+      updates.branch || user.branch,
+    );
 
   for (const key of Object.keys(updates)) {
     user[key] = updates[key];
@@ -410,19 +472,22 @@ const modifyEvent = asyncHandler(async (req, res) => {
     const parsedTargets = JSON.parse(updates.targets);
 
     for (const t of parsedTargets) {
-      await validateSchool(t.school);
+      t.school = await validateSchool(t.school);
 
       for (const b of t.branches) {
         if (b.StudentYear != null && (b.StudentYear < 1 || b.StudentYear > 5)) {
           throw new ApiError(400, "Invalid StudentYear");
         }
 
-        await validateBranch(b.branch, t.school);
+        b.branch = await validateBranch(b.branch, t.school);
 
         if (b.divisions?.length) {
-          for (const d of b.divisions) {
-            await validateDivision(d, b.branch);
+          let divisionIds = [];
+          for (let k = 0; k < b.divisions.length; k++) {
+            const divisionId = await validateDivision(b.divisions[k], b.branch);
+            divisionIds.push(divisionId);
           }
+          b.divisions = divisionIds;
         }
       }
     }
@@ -607,6 +672,55 @@ const createDivision = asyncHandler(async (req, res) => {
   } catch (error) {
     throw new ApiError(404, "Error while creating division");
   }
+});
+
+const getBranch = asyncHandler(async (req, res) => {
+  const { name, school } = await req.body;
+
+  if (!name || !school) {
+    throw new ApiError(404, "Name or school not found");
+  }
+
+  const schoolObj = await School.find({ name: school });
+
+  const branch = await Branch.findOne({ name: name, school: schoolObj._id });
+  if (!branch) {
+    throw new ApiError(404, "Branch not found");
+  }
+  return res
+    .status(200)
+    .json(new ApiResponse(200, { branch }, "Branch fetched successfully"));
+});
+
+const getSchool = asyncHandler(async (req, res) => {
+  const { name } = await req.body;
+
+  if (!name) {
+    throw new ApiError(404, "name not found");
+  }
+
+  const school = await Branch.findOne({ name: name });
+  if (!school) {
+    throw new ApiError(404, "School not found");
+  }
+  return res
+    .status(200)
+    .json(new ApiResponse(200, { school }, "School fetched successfully"));
+});
+
+const getDivision = asyncHandler(async (req, res) => {
+  const { name, branch } = req.body;
+  if (!name || !branch) {
+    throw new ApiError(404, "Name or branch not found");
+  }
+  const branchObj = await Branch.find({ name: branch });
+  const division = await Division.find({ name: name, branch: branchObj._id });
+  if (!division) {
+    throw new ApiError(404, "Division not found");
+  }
+  return res
+    .status(200)
+    .json(new ApiResponse(200, { division }, "Division fetched successfully"));
 });
 
 const modifyBranch = asyncHandler(async (req, res) => {
@@ -848,6 +962,9 @@ const deleteSchool = asyncHandler(async (req, res) => {
 });
 
 export {
+  getBranch,
+  getSchool,
+  getDivision,
   validateSchool,
   validateBranch,
   validateDivision,
@@ -937,19 +1054,23 @@ const createEventFaculty = asyncHandler(async (req, res) => {
 
   const parsedTargets = JSON.parse(targets);
 
-  // Validate targets
   for (const t of parsedTargets) {
-    await validateSchool(t.school);
+    t.school = await validateSchool(t.school);
 
     for (const b of t.branches) {
       if (b.StudentYear != null && (b.StudentYear < 1 || b.StudentYear > 5)) {
         throw new ApiError(400, "Invalid StudentYear");
       }
-      await validateBranch(b.branch, t.school);
+
+      b.branch = await validateBranch(b.branch, t.school);
+
       if (b.divisions?.length) {
-        for (const d of b.divisions) {
-          await validateDivision(d, b.branch);
+        let divisionIds = [];
+        for (let k = 0; k < b.divisions.length; k++) {
+          const divisionId = await validateDivision(b.divisions[k], b.branch);
+          divisionIds.push(divisionId);
         }
+        b.divisions = divisionIds;
       }
     }
   }
@@ -994,6 +1115,7 @@ const createEventFaculty = asyncHandler(async (req, res) => {
     .status(201)
     .json(new ApiResponse(201, event, "Event created successfully"));
 });
+
 // HoD
 
 const createEventHoD = asyncHandler(async (req, res) => {
@@ -1033,17 +1155,22 @@ const createEventHoD = asyncHandler(async (req, res) => {
   const parsedTargets = JSON.parse(targets);
 
   for (const t of parsedTargets) {
-    await validateSchool(t.school);
+    t.school = await validateSchool(t.school);
 
     for (const b of t.branches) {
       if (b.StudentYear != null && (b.StudentYear < 1 || b.StudentYear > 5)) {
         throw new ApiError(400, "Invalid StudentYear");
       }
-      await validateBranch(b.branch, t.school);
+
+      b.branch = await validateBranch(b.branch, t.school);
+
       if (b.divisions?.length) {
-        for (const d of b.divisions) {
-          await validateDivision(d, b.branch);
+        let divisionIds = [];
+        for (let k = 0; k < b.divisions.length; k++) {
+          const divisionId = await validateDivision(b.divisions[k], b.branch);
+          divisionIds.push(divisionId);
         }
+        b.divisions = divisionIds;
       }
     }
   }
@@ -1130,17 +1257,22 @@ const createEventDean = asyncHandler(async (req, res) => {
   const parsedTargets = JSON.parse(targets);
 
   for (const t of parsedTargets) {
-    await validateSchool(t.school);
+    t.school = await validateSchool(t.school);
 
     for (const b of t.branches) {
       if (b.StudentYear != null && (b.StudentYear < 1 || b.StudentYear > 5)) {
         throw new ApiError(400, "Invalid StudentYear");
       }
-      await validateBranch(b.branch, t.school);
+
+      b.branch = await validateBranch(b.branch, t.school);
+
       if (b.divisions?.length) {
-        for (const d of b.divisions) {
-          await validateDivision(d, b.branch);
+        let divisionIds = [];
+        for (let k = 0; k < b.divisions.length; k++) {
+          const divisionId = await validateDivision(b.divisions[k], b.branch);
+          divisionIds.push(divisionId);
         }
+        b.divisions = divisionIds;
       }
     }
   }
@@ -1230,17 +1362,22 @@ const createEventDirector = asyncHandler(async (req, res) => {
   const parsedTargets = JSON.parse(targets);
 
   for (const t of parsedTargets) {
-    await validateSchool(t.school);
+    t.school = await validateSchool(t.school);
 
     for (const b of t.branches) {
       if (b.StudentYear != null && (b.StudentYear < 1 || b.StudentYear > 5)) {
         throw new ApiError(400, "Invalid StudentYear");
       }
-      await validateBranch(b.branch, t.school);
+
+      b.branch = await validateBranch(b.branch, t.school);
+
       if (b.divisions?.length) {
-        for (const d of b.divisions) {
-          await validateDivision(d, b.branch);
+        let divisionIds = [];
+        for (let k = 0; k < b.divisions.length; k++) {
+          const divisionId = await validateDivision(b.divisions[k], b.branch);
+          divisionIds.push(divisionId);
         }
+        b.divisions = divisionIds;
       }
     }
   }
@@ -1323,17 +1460,22 @@ const createEventClub = asyncHandler(async (req, res) => {
   const parsedTargets = JSON.parse(targets);
 
   for (const t of parsedTargets) {
-    await validateSchool(t.school);
+    t.school = await validateSchool(t.school);
 
     for (const b of t.branches) {
       if (b.StudentYear != null && (b.StudentYear < 1 || b.StudentYear > 5)) {
         throw new ApiError(400, "Invalid StudentYear");
       }
-      await validateBranch(b.branch, t.school);
+
+      b.branch = await validateBranch(b.branch, t.school);
+
       if (b.divisions?.length) {
-        for (const d of b.divisions) {
-          await validateDivision(d, b.branch);
+        let divisionIds = [];
+        for (let k = 0; k < b.divisions.length; k++) {
+          const divisionId = await validateDivision(b.divisions[k], b.branch);
+          divisionIds.push(divisionId);
         }
+        b.divisions = divisionIds;
       }
     }
   }
@@ -1380,6 +1522,7 @@ const createEventClub = asyncHandler(async (req, res) => {
     .status(201)
     .json(new ApiResponse(201, event, "Event created successfully"));
 });
+``;
 
 export {
   determineEventLevel,

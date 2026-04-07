@@ -74,19 +74,22 @@ const modifyEventBeforeApproveCommon = asyncHandler(async (req, res) => {
     const parsedTargets = JSON.parse(updates.targets);
 
     for (const t of parsedTargets) {
-      await validateSchool(t.school);
+      t.school = await validateSchool(t.school);
 
       for (const b of t.branches) {
         if (b.StudentYear != null && (b.StudentYear < 1 || b.StudentYear > 5)) {
           throw new ApiError(400, "Invalid StudentYear");
         }
 
-        await validateBranch(b.branch, t.school);
+        b.branch = await validateBranch(b.branch, t.school);
 
         if (b.divisions?.length) {
-          for (const d of b.divisions) {
-            await validateDivision(d, b.branch);
+          let divisionIds = [];
+          for (let k = 0; k < b.divisions.length; k++) {
+            const divisionId = await validateDivision(b.divisions[k], b.branch);
+            divisionIds.push(divisionId);
           }
+          b.divisions = divisionIds;
         }
       }
     }

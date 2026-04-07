@@ -14,10 +14,7 @@ const verifyJWT = asyncHandler(async (req, res) => {
       throw new ApiError(404, "Token not found");
     }
 
-    const decodeToken = await jwt.verify(
-      token,
-      process.env.ACCESS_TOKEN_SECRET,
-    );
+    const decodeToken = jwt.verify(token, process.env.ACCESS_TOKEN_SECRET);
 
     if (!decodeToken) {
       throw new ApiError(404, "Decoded token not found");
