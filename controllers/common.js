@@ -74,16 +74,44 @@ const modifyEventBeforeApproveCommon = asyncHandler(async (req, res) => {
     const parsedTargets = JSON.parse(updates.targets);
 
     for (const t of parsedTargets) {
-      t.school = await validateSchool(t.school);
-
-      for (const b of t.branches) {
-        if (b.StudentYear != null && (b.StudentYear < 1 || b.StudentYear > 5)) {
-          throw new ApiError(400, "Invalid StudentYear");
+      if (t.school) {
+        t.school = await validateSchool(t.school);
+      } else {
+        if (t.branches?.length) {
+          throw new ApiError(
+            400,
+            "Cannot select branch without selecting school",
+          );
         }
+        continue;
+      }
 
+      for (const b of t.branches || []) {
+        if (!b.branch) {
+          throw new ApiError(400, "Branch is required if selected");
+        }
         b.branch = await validateBranch(b.branch, t.school);
 
+        if (b.StudentYear != null) {
+          if (!t.school || !b.branch) {
+            throw new ApiError(
+              400,
+              "Cannot select year without selecting school and branch",
+            );
+          }
+          if (b.StudentYear < 1 || b.StudentYear > 5) {
+            throw new ApiError(400, "Invalid StudentYear");
+          }
+        }
+
         if (b.divisions?.length) {
+          if (!t.school || !b.branch || b.StudentYear == null) {
+            throw new ApiError(
+              400,
+              "Cannot select divisions without selecting school, branch, and year",
+            );
+          }
+
           let divisionIds = [];
           for (let k = 0; k < b.divisions.length; k++) {
             const divisionId = await validateDivision(b.divisions[k], b.branch);
@@ -192,7 +220,7 @@ const modifyEventBeforeApproveCommon = asyncHandler(async (req, res) => {
   return res
     .status(200)
     .json(new ApiResponse(200, { event }, "Event modified successfully"));
-});
+}); // complete
 
 const modifyEventAfterApproveCommon = asyncHandler(async (req, res) => {
   if (!["Faculty", "HoD", "Dean", "Director", "Club"].includes(req.user.role)) {
@@ -257,7 +285,7 @@ const modifyEventAfterApproveCommon = asyncHandler(async (req, res) => {
   res
     .status(200)
     .json(new ApiResponse(200, { event }, "Event modified successfully"));
-});
+}); // complete
 
 const deleteEventCommon = asyncHandler(async (req, res) => {
   if (!["Faculty", "HoD", "Dean", "Director", "Club"].includes(req.user.role)) {
@@ -286,7 +314,7 @@ const deleteEventCommon = asyncHandler(async (req, res) => {
   await event.deleteOne();
 
   res.status(200).json(new ApiResponse(200, {}, "Event deleted successfully"));
-});
+}); // complete
 
 const getEventCommon = asyncHandler(async (req, res) => {
   if (!["Faculty", "HoD", "Dean", "Director", "Club"].includes(req.user.role)) {
@@ -326,7 +354,7 @@ const getEventCommon = asyncHandler(async (req, res) => {
   return res
     .status(200)
     .json(new ApiResponse(200, { events }, "Event fetched successfully"));
-});
+}); // complete
 
 const myEvent = asyncHandler(async (req, res) => {
   try {
@@ -377,7 +405,7 @@ const myEvent = asyncHandler(async (req, res) => {
   } catch (error) {
     throw new ApiError(404, "Something went wrong while fetching event");
   }
-});
+}); // complete
 
 const getEventFeedbackCommon = asyncHandler(async (req, res) => {
   const { eventId } = req.params;
@@ -407,7 +435,7 @@ const getEventFeedbackCommon = asyncHandler(async (req, res) => {
     count: feedback.feedbacks.length,
     data: feedback.feedbacks,
   });
-});
+}); // complete
 
 const getEventApprovalOrReject = asyncHandler(async (req, res) => {
   if (
@@ -467,7 +495,7 @@ const getEventApprovalOrReject = asyncHandler(async (req, res) => {
   return res
     .status(200)
     .json(new ApiResponse(200, { events }, "Event fetched successfully"));
-});
+}); // complete
 
 const eventStatusApproveCommon = asyncHandler(async (req, res) => {
   try {
@@ -504,7 +532,7 @@ const eventStatusApproveCommon = asyncHandler(async (req, res) => {
   } catch (error) {
     throw new ApiError(404, "Error while approving event");
   }
-});
+}); // complete
 
 const eventStatusRejectCommon = asyncHandler(async (req, res) => {
   try {
@@ -540,7 +568,7 @@ const eventStatusRejectCommon = asyncHandler(async (req, res) => {
   } catch (error) {
     throw new ApiError(404, "Error while rejecting event");
   }
-});
+}); // complete
 
 const startAttendance = asyncHandler(async (req, res) => {
   const { eventId } = req.body;
@@ -580,7 +608,7 @@ const startAttendance = asyncHandler(async (req, res) => {
   }, 30000);
 
   res.json({ message: "Attendance started (1 min window)" });
-});
+}); // complete
 
 const getCurrentToken = asyncHandler(async (req, res) => {
   const { eventId } = req.query;
@@ -592,7 +620,7 @@ const getCurrentToken = asyncHandler(async (req, res) => {
   }
 
   res.json({ token });
-});
+}); // complete
 
 const manualMarkAttendance = asyncHandler(async (req, res) => {
   const { eventId, studentIds } = req.body;
@@ -623,7 +651,7 @@ const manualMarkAttendance = asyncHandler(async (req, res) => {
     .json(
       new ApiResponse(200, { attendanceDoc }, "Attendance done successfully"),
     );
-});
+}); // complete
 
 const getRegisteredStudents = asyncHandler(async (req, res) => {
   const { eventId } = req.params;
@@ -650,7 +678,7 @@ const getRegisteredStudents = asyncHandler(async (req, res) => {
     .json(
       new ApiResponse(200, { event }, "Registrations fetched successfully"),
     );
-});
+}); // complete
 
 const getStudentAttendanceList = asyncHandler(async (req, res) => {
   const { eventId } = req.params;
@@ -676,7 +704,7 @@ const getStudentAttendanceList = asyncHandler(async (req, res) => {
   }
 
   return res.status(200).json(new ApiResponse(200, { record }));
-});
+}); // complete
 
 export {
   modifyEventBeforeApproveCommon,

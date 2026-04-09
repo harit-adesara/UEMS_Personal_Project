@@ -1,4 +1,4 @@
-import body from "express-validator";
+import { body } from "express-validator";
 
 const registerval = () => {
   return [
@@ -63,18 +63,13 @@ const createUserValidator = () => {
       .trim()
       .withMessage("roll_number must be string"),
 
-    body("division")
-      .if(body("role").equals("Student"))
-      .notEmpty()
-      .withMessage("division is required for Student")
-      .isString()
-      .trim()
-      .withMessage("division must be string"),
-
     body("school")
       .if(
         (value, { req }) =>
-          req.body.role === "Student" || req.body.role === "Dean",
+          req.body.role === "Student" ||
+          req.body.role === "Dean" ||
+          req.body.role === "HoD" ||
+          req.body.role === "Faculty",
       )
       .notEmpty()
       .withMessage("school is required for Student or Dean")
@@ -85,13 +80,21 @@ const createUserValidator = () => {
     body("branch")
       .if(
         (value, { req }) =>
-          req.body.role === "Student" || req.body.role === "HoD",
+          req.body.role === "Student" ||
+          req.body.role === "HoD" ||
+          req.body.role === "Faculty",
       )
       .notEmpty()
       .withMessage("branch is required for Student or HoD")
       .isString()
       .trim()
-      .withMessage("branch must be string"),
+      .withMessage("branch must be string")
+      .custom((value, { req }) => {
+        if (!req.body.school) {
+          throw new Error("School must be provided before branch");
+        }
+        return true;
+      }),
 
     body("year")
       .if(body("role").equals("Student"))
@@ -100,6 +103,20 @@ const createUserValidator = () => {
       .isInt({ min: 1, max: 5 })
       .trim()
       .withMessage("year must be an integer between 1 and 5"),
+
+    body("division")
+      .if(body("role").equals("Student"))
+      .notEmpty()
+      .withMessage("division is required for Student")
+      .isString()
+      .trim()
+      .withMessage("division must be string")
+      .custom((value, { req }) => {
+        if (!req.body.branch) {
+          throw new Error("Branch must be provided before division");
+        }
+        return true;
+      }),
   ];
 };
 
@@ -140,7 +157,9 @@ const modifyUserValidator = () => {
     body("school")
       .optional()
       .if((value, { req }) =>
-        ["Student", "Dean"].includes(req.body.role || req.user.role),
+        ["Student", "Dean", "HoD", "Faculty"].includes(
+          req.body.role || req.user.role,
+        ),
       )
       .notEmpty()
       .withMessage("school is required for Student or Dean")
@@ -150,12 +169,18 @@ const modifyUserValidator = () => {
     body("branch")
       .optional()
       .if((value, { req }) =>
-        ["Student", "HoD"].includes(req.body.role || req.user.role),
+        ["Student", "HoD", "Faculty"].includes(req.body.role || req.user.role),
       )
       .notEmpty()
       .withMessage("branch is required for Student or HoD")
       .isString()
-      .withMessage("branch must be string"),
+      .withMessage("branch must be string")
+      .custom((value, { req }) => {
+        if (!req.body.school && !req.user.school) {
+          throw new Error("School must exist before updating branch");
+        }
+        return true;
+      }),
 
     body("division")
       .optional()
@@ -163,7 +188,13 @@ const modifyUserValidator = () => {
       .notEmpty()
       .withMessage("division is required for Student")
       .isString()
-      .withMessage("division must be string"),
+      .withMessage("division must be string")
+      .custom((value, { req }) => {
+        if (!req.body.branch && !req.user.branch) {
+          throw new Error("Branch must exist before updating division");
+        }
+        return true;
+      }),
   ];
 };
 
@@ -311,12 +342,48 @@ const createEventValidator = () => {
       .notEmpty()
       .withMessage("Targets are required")
       .custom((value) => {
+        let parsed;
+
         try {
-          JSON.parse(value);
-          return true;
-        } catch (err) {
+          parsed = JSON.parse(value);
+        } catch {
           throw new Error("Targets must be valid JSON");
         }
+
+        if (!Array.isArray(parsed)) {
+          throw new Error("Targets must be an array");
+        }
+
+        parsed.forEach((t) => {
+          if (!t.school) throw new Error("School is required");
+
+          if (!Array.isArray(t.branches)) {
+            throw new Error("Branches must be array");
+          }
+
+          t.branches.forEach((b) => {
+            if (!b.branch) {
+              throw new Error("Branch is required");
+            }
+
+            if (b.divisions?.length && !b.branch) {
+              throw new Error("Branch required when divisions are provided");
+            }
+
+            if (
+              b.StudentYear != null &&
+              (b.StudentYear < 1 || b.StudentYear > 5)
+            ) {
+              throw new Error("Invalid StudentYear");
+            }
+
+            if (b.divisions && !Array.isArray(b.divisions)) {
+              throw new Error("Divisions must be array");
+            }
+          });
+        });
+
+        return true;
       }),
 
     body("epsFile").custom((value, { req }) => {
@@ -397,33 +464,43 @@ const modifyEventBeforeApproveValidator = () => {
       .optional()
       .custom((value) => {
         let parsed;
+
         try {
-          parsed = typeof value === "string" ? JSON.parse(value) : value;
+          parsed = JSON.parse(value);
         } catch {
           throw new Error("Targets must be valid JSON");
         }
 
-        if (!Array.isArray(parsed)) throw new Error("Targets must be an array");
+        if (!Array.isArray(parsed)) {
+          throw new Error("Targets must be an array");
+        }
 
         parsed.forEach((t) => {
-          if (!t.school) throw new Error("Each target must have a school");
-          if (!Array.isArray(t.branches))
-            throw new Error("Branches must be an array");
+          if (!t.school) throw new Error("School is required");
+
+          if (!Array.isArray(t.branches)) {
+            throw new Error("Branches must be array");
+          }
 
           t.branches.forEach((b) => {
+            if (!b.branch) {
+              throw new Error("Branch is required");
+            }
+
+            if (b.divisions?.length && !b.branch) {
+              throw new Error("Branch required when divisions are provided");
+            }
+
             if (
               b.StudentYear != null &&
               (b.StudentYear < 1 || b.StudentYear > 5)
-            )
-              throw new Error("StudentYear must be between 1 and 5");
+            ) {
+              throw new Error("Invalid StudentYear");
+            }
 
-            if (!b.branch && b.StudentYear != null)
-              throw new Error(
-                "Branch is required when StudentYear is provided",
-              );
-
-            if (b.divisions && !Array.isArray(b.divisions))
-              throw new Error("Divisions must be an array");
+            if (b.divisions && !Array.isArray(b.divisions)) {
+              throw new Error("Divisions must be array");
+            }
           });
         });
 

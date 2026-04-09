@@ -4,6 +4,7 @@ import crypto from "crypto";
 import { ApiError } from "../utils/api_error.js";
 import { ApiResponse } from "../utils/api_response.js";
 import { forgotPasswordMailgenContent, sendEmail } from "../utils/mail.js";
+import { registerEmail } from "../utils/mail.js";
 import jwt from "jsonwebtoken";
 
 const generateAccessAndRefreshToken = async (userId) => {
@@ -15,6 +16,8 @@ const generateAccessAndRefreshToken = async (userId) => {
     await user.save({ validateBeforeSave: false });
     return { accessToken, refreshToken };
   } catch (error) {
+    console.log(error);
+
     throw new ApiError(500, "Something went wrong while generating tokens");
   }
 };

@@ -21,4 +21,9 @@ const branchSchema = new Schema(
   { timestamps: true },
 );
 
+branchSchema.index(
+  { name: 1, school: 1 },
+  { unique: true, partialFilterExpression: { isDeleted: false } },
+);
+
 export const Branch = mongoose.model("Branch", branchSchema);

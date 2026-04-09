@@ -59,7 +59,6 @@ const userSchema = new Schema(
       type: String,
       required: [true, "Password is required"],
       trim: true,
-      select: false,
     },
     refreshToken: {
       type: String,
@@ -90,14 +89,23 @@ const userSchema = new Schema(
       type: Schema.Types.ObjectId,
       ref: "Branch",
       required: function () {
-        return this.role === "Student" || this.role === "HoD";
+        return (
+          this.role === "Student" ||
+          this.role === "HoD" ||
+          this.role === "Faculty"
+        );
       },
     },
     school: {
       type: Schema.Types.ObjectId,
       ref: "School",
       required: function () {
-        return this.role === "Dean" || this.role === "Student";
+        return (
+          this.role === "Dean" ||
+          this.role === "Student" ||
+          this.role === "Faculty" ||
+          this.role === "HoD"
+        );
       },
     },
   },
@@ -125,8 +133,6 @@ userSchema.pre("save", function (next) {
   if (this.role !== "Dean" && this.role !== "Student") {
     this.school = undefined;
   }
-
-  next();
 });
 
 userSchema.pre("save", async function (next) {
@@ -134,7 +140,6 @@ userSchema.pre("save", async function (next) {
     return;
   }
   this.password = await bcrypt.hash(this.password, 10);
-  next();
 });
 
 userSchema.methods.isPasswordCorrect = async function (password) {

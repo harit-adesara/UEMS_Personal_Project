@@ -16,4 +16,9 @@ const schoolSchema = new Schema(
   { timestamps: true },
 );
 
+schoolSchema.index(
+  { name: 1 },
+  { unique: true, partialFilterExpression: { isDeleted: false } },
+);
+
 export const School = mongoose.model("School", schoolSchema);

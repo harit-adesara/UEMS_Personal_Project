@@ -1,5 +1,7 @@
 import express from "express";
 
+import { validate } from "../middleware/validate.js";
+
 import {
   attachUser,
   knownEmailLimiter,
@@ -73,7 +75,14 @@ const router = express.Router();
 
 router
   .route("/login")
-  .post(attachUser, unknownEmailLimiter, knownEmailLimiter, loginval, login);
+  .post(
+    attachUser,
+    unknownEmailLimiter,
+    knownEmailLimiter,
+    loginval(),
+    validate,
+    login,
+  ); //complete
 
 router
   .route("/forgot-password")
@@ -88,23 +97,23 @@ router.route("/reset-password/:resetToken").post(resetForgetPassword);
 
 router
   .route("/resend-invite")
-  .post(attachUser, resendEmailLimiter, resendCreateUserMail);
+  .post(attachUser, resendEmailLimiter, resendCreateUserMail); //complete
 
-router.route("/register/:unHashedToken").post(registerval, registerUser);
+router.route("/register/:unHashedToken").post(registerval(), registerUser); // complete
 
 router.route("/refresh-token").post(refreshAccessToken);
 
-router.route("/me").get(verifyJWT, getCurrentUser);
+router.route("/me").get(verifyJWT, getCurrentUser); // complete
 
-router.route("/logout").post(verifyJWT, logOut);
+router.route("/logout").post(verifyJWT, logOut); // complete
 
-router.route("/change-password").post(verifyJWT, changePassword);
+router.route("/change-password").post(verifyJWT, changePassword); //complete
 
 router
   .route("/event/modify-before-approve/:eventId")
   .post(
     verifyJWT,
-    modifyEventBeforeApproveValidator,
+    modifyEventBeforeApproveValidator(),
     modifyEventBeforeApproveCommon,
   );
 
@@ -112,7 +121,7 @@ router
   .route("/event/modify-after-approve/:eventId")
   .post(
     verifyJWT,
-    modifyEventAfterApproveValidator,
+    modifyEventAfterApproveValidator(),
     modifyEventAfterApproveCommon,
   );
 
@@ -162,7 +171,8 @@ router.post(
     { name: "epsFile", maxCount: 1 },
     { name: "photo", maxCount: 1 },
   ]),
-  createEventValidator,
+  verifyJWT,
+  createEventValidator(),
   createEventClub,
 );
 
@@ -172,7 +182,7 @@ router.post(
     { name: "epsFile", maxCount: 1 },
     { name: "photo", maxCount: 1 },
   ]),
-  createEventValidator,
+  createEventValidator(),
   createEventDirector,
 );
 
@@ -182,7 +192,7 @@ router.post(
     { name: "epsFile", maxCount: 1 },
     { name: "photo", maxCount: 1 },
   ]),
-  createEventValidator,
+  createEventValidator(),
   createEventFaculty,
 );
 
@@ -192,9 +202,10 @@ router.post(
     { name: "epsFile", maxCount: 1 },
     { name: "photo", maxCount: 1 },
   ]),
-  createEventValidator,
+  verifyJWT,
+  createEventValidator(),
   createEventHoD,
-);
+); // complete
 
 router.post(
   "/event/dean/create",
@@ -202,15 +213,15 @@ router.post(
     { name: "epsFile", maxCount: 1 },
     { name: "photo", maxCount: 1 },
   ]),
-  createEventValidator,
+  createEventValidator(),
   createEventDean,
 );
 // ------------------- ADMIN -------------------
 
 // User
-router.post("/user/create", createUserValidator, createUser);
+router.post("/user/create", verifyJWT, createUserValidator(), createUser);
 
-router.put("/user/modify", modifyUserValidator, modifyUser);
+router.put("/user/modify", modifyUserValidator(), modifyUser);
 
 router.delete("/user/delete/:userId", deleteUser);
 

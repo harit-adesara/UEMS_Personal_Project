@@ -22,4 +22,9 @@ const divisionSchema = new Schema(
   { timestamps: true },
 );
 
+divisionSchema.index(
+  { name: 1, branch: 1 },
+  { unique: true, partialFilterExpression: { isDeleted: false } },
+);
+
 export const Division = mongoose.model("Division", divisionSchema);

@@ -87,7 +87,7 @@ const addFeedback = asyncHandler(async (req, res) => {
   await feedbackDoc.save();
 
   res.status(201).json(new ApiResponse(200, { message: "Feedback submitted" }));
-});
+}); // complete
 
 const markAttendanceQR = asyncHandler(async (req, res) => {
   const { eventId } = req.body;
@@ -111,7 +111,7 @@ const markAttendanceQR = asyncHandler(async (req, res) => {
   await attendanceDoc.save();
 
   res.status(200).json({ message: "Attendance marked successfully" });
-});
+}); // complete
 
 const registerInEvent = asyncHandler(async (req, res) => {
   if (req.user.role !== "Student") {
@@ -211,7 +211,7 @@ const registerInEvent = asyncHandler(async (req, res) => {
   } finally {
     session.endSession();
   }
-});
+}); //complete
 
 const eventListStudent = asyncHandler(async (req, res) => {
   if (req.user.role !== "Student") {
@@ -264,7 +264,7 @@ const eventListStudent = asyncHandler(async (req, res) => {
     throw new ApiError(404, "No events found for your profile");
 
   res.status(200).json(new ApiResponse(200, { events }));
-});
+}); // complete
 
 const viewEventDetail = asyncHandler(async (req, res) => {
   const { eventId } = req.params;
@@ -275,7 +275,7 @@ const viewEventDetail = asyncHandler(async (req, res) => {
   return res
     .status(200)
     .json(new ApiResponse(200, { event }, "Event fetched successfully"));
-});
+}); // complete
 
 const myRegisteredEvent = asyncHandler(async (req, res) => {
   if (req.user.role !== "Student") {
@@ -314,7 +314,7 @@ const myRegisteredEvent = asyncHandler(async (req, res) => {
   return res
     .status(200)
     .json(new ApiResponse(200, { filtered }, "Event fetched successfully"));
-});
+}); // complete
 
 const getStudentAttendance = asyncHandler(async (req, res) => {
   const { studentId } = req.params;
@@ -354,7 +354,7 @@ const getStudentAttendance = asyncHandler(async (req, res) => {
     .json(
       new ApiResponse(200, { filtered }, "Attendance fetched successfully"),
     );
-});
+}); // complete
 
 export {
   addFeedback,

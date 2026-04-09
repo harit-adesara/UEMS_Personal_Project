@@ -9,6 +9,7 @@ import { Division } from "../models/division.js";
 import { registerEmail, sendEmail } from "../utils/mail.js";
 import { uploadToCloudinary } from "../utils/uploadCloud.js";
 import cloudinary from "../db/cloudinary.js";
+import mongoose from "mongoose";
 
 const validateSchool = async (school) => {
   if (!school) return null;
@@ -20,73 +21,86 @@ const validateSchool = async (school) => {
     throw new ApiError(400, "Invalid school");
   }
   return schoolObj._id;
-};
+}; // complete
 
-const validateBranch = async (branch, school = null) => {
+const validateBranch = async (branch, school) => {
   if (!branch) return null;
 
-  const branchObj = await Branch.findOne({ name: branch }).populate(
-    "school",
-    "name",
-  );
+  if (!school) {
+    throw new ApiError(400, "School is required for branch validation");
+  }
 
-  if (!branchObj || branchObj.isDeleted)
-    throw new ApiError(400, "Invalid branch");
-
-  if (school) {
-    let schoolName = school;
-
-    // If school is ObjectId → fetch its name
-    if (mongoose.Types.ObjectId.isValid(school)) {
-      const schoolObj = await School.findById(school);
-      if (!schoolObj) throw new ApiError(400, "Invalid school");
-      schoolName = schoolObj.name;
+  let schoolId;
+  if (mongoose.Types.ObjectId.isValid(school)) {
+    schoolId = school.toString();
+  } else {
+    const schoolObj = await School.findOne({ name: school });
+    if (!schoolObj || schoolObj.isDeleted) {
+      throw new ApiError(400, "Invalid school");
     }
+    schoolId = schoolObj._id.toString();
+  }
 
-    if (branchObj.school.name !== schoolName) {
-      throw new ApiError(400, "Branch does not belong to given school");
-    }
+  let branchObj;
+
+  if (mongoose.Types.ObjectId.isValid(branch)) {
+    branchObj = await Branch.findOne({
+      _id: branch,
+      school: schoolId,
+    });
+  } else {
+    branchObj = await Branch.findOne({
+      name: branch,
+      school: schoolId,
+    });
+  }
+
+  if (!branchObj || branchObj.isDeleted) {
+    throw new ApiError(400, "Invalid branch for given school");
   }
 
   return branchObj._id;
-};
+}; // complete
 
-const validateDivision = async (division, branch = null) => {
+const validateDivision = async (division, branch) => {
   if (!division) return null;
 
-  // Resolve division (name OR id)
-  const query = mongoose.Types.ObjectId.isValid(division)
-    ? { _id: division }
-    : { name: division };
+  if (!branch) {
+    throw new ApiError(400, "Branch is required for division validation");
+  }
 
-  const divisionObj = await Division.findOne(query);
+  let branchId;
+  if (mongoose.Types.ObjectId.isValid(branch)) {
+    branchId = branch.toString();
+  } else {
+    const branchObj = await Branch.findOne({ name: branch });
+    if (!branchObj || branchObj.isDeleted) {
+      throw new ApiError(400, "Invalid branch");
+    }
+    branchId = branchObj._id.toString();
+  }
+
+  let divisionObj;
+
+  if (mongoose.Types.ObjectId.isValid(division)) {
+    divisionObj = await Division.findOne({
+      _id: division,
+      branch: branchId,
+    });
+  } else {
+    divisionObj = await Division.findOne({
+      name: division,
+      branch: branchId,
+      ś,
+    });
+  }
 
   if (!divisionObj || divisionObj.isDeleted) {
-    throw new ApiError(400, "Invalid division");
-  }
-
-  // Normalize branch → ObjectId
-  let branchId = null;
-
-  if (branch) {
-    if (mongoose.Types.ObjectId.isValid(branch)) {
-      branchId = branch.toString();
-    } else {
-      const branchObj = await Branch.findOne({ name: branch });
-      if (!branchObj || branchObj.isDeleted) {
-        throw new ApiError(400, "Invalid branch");
-      }
-      branchId = branchObj._id.toString();
-    }
-  }
-
-  // Validate relation
-  if (branchId && divisionObj.branch.toString() !== branchId) {
-    throw new ApiError(400, "Division does not belong to given branch");
+    throw new ApiError(400, "Invalid division for given branch");
   }
 
   return divisionObj._id;
-};
+}; // complete
 
 const createUser = asyncHandler(async (req, res) => {
   if (req.user.role !== "Admin") {
@@ -111,8 +125,8 @@ const createUser = asyncHandler(async (req, res) => {
     }
   }
 
-  if (role === "HoD" && !branch) {
-    throw new ApiError(400, "Branch required for HoD");
+  if ((role === "HoD" || role === "Faculty") && !branch && !school) {
+    throw new ApiError(400, "Branch and School required for HoD");
   }
 
   if (role === "Dean" && !school) {
@@ -180,7 +194,7 @@ const createUser = asyncHandler(async (req, res) => {
   return res
     .status(201)
     .json(new ApiResponse(201, user, "User created successfully"));
-});
+}); // complete
 
 const getEvent = asyncHandler(async (req, res) => {
   try {
@@ -222,7 +236,7 @@ const getEvent = asyncHandler(async (req, res) => {
   } catch (error) {
     throw new ApiError(404, "Event not found");
   }
-});
+}); // complete
 
 const getUser = asyncHandler(async (req, res) => {
   try {
@@ -240,7 +254,7 @@ const getUser = asyncHandler(async (req, res) => {
   } catch (error) {
     throw new ApiError(404, "Erro while fetching user");
   }
-});
+}); // complete
 
 const eventStatusApprove = asyncHandler(async (req, res) => {
   try {
@@ -269,7 +283,7 @@ const eventStatusApprove = asyncHandler(async (req, res) => {
   } catch (error) {
     throw new ApiError(404, "Error while approving event");
   }
-});
+}); // complete
 
 const eventStatusReject = asyncHandler(async (req, res) => {
   try {
@@ -298,7 +312,7 @@ const eventStatusReject = asyncHandler(async (req, res) => {
   } catch (error) {
     throw new ApiError(404, "Error while rejecting event");
   }
-});
+}); // complete
 
 const modifyUser = asyncHandler(async (req, res) => {
   if (req.user.role !== "Admin") {
@@ -349,10 +363,12 @@ const modifyUser = asyncHandler(async (req, res) => {
     user.roll_number = undefined;
     user.division = undefined;
   }
-  if (role !== "Student" && role !== "HoD") {
+
+  if (!["HoD", "Faculty"].includes(role)) {
     user.branch = undefined;
   }
-  if (role !== "Student" && role !== "Dean") {
+
+  if (!["HoD", "Faculty", "Dean"].includes(role)) {
     user.school = undefined;
   }
 
@@ -370,15 +386,33 @@ const modifyUser = asyncHandler(async (req, res) => {
       );
     }
   }
-  if (role === "HoD" && !user.branch)
-    throw new ApiError(400, "HoD requires branch");
-  if (role === "Dean" && !user.school)
+  if (role === "Student") {
+    if (
+      !user.roll_number ||
+      !user.division ||
+      !user.school ||
+      !user.branch ||
+      !user.year
+    ) {
+      throw new ApiError(
+        400,
+        "Student requires roll_number, division, school, branch, and year",
+      );
+    }
+  }
+  if (["HoD", "Faculty"].includes(role)) {
+    if (!user.branch || !user.school) {
+      throw new ApiError(400, `${role} requires both branch and school`);
+    }
+  }
+  if (role === "Dean" && !user.school) {
     throw new ApiError(400, "Dean requires school");
+  }
 
   await user.save();
 
   res.status(200).json(new ApiResponse(200, user, "User updated successfully"));
-});
+}); // complete
 
 const deleteUser = asyncHandler(async (req, res) => {
   const { userId } = req.params;
@@ -400,7 +434,7 @@ const deleteUser = asyncHandler(async (req, res) => {
   await user.save();
 
   res.status(200).json(new ApiResponse(200, {}, "User deleted successfully"));
-});
+}); // complete
 
 const deleteFromCloudinary = async (public_id, type) => {
   if (!public_id) return;
@@ -472,16 +506,44 @@ const modifyEvent = asyncHandler(async (req, res) => {
     const parsedTargets = JSON.parse(updates.targets);
 
     for (const t of parsedTargets) {
-      t.school = await validateSchool(t.school);
-
-      for (const b of t.branches) {
-        if (b.StudentYear != null && (b.StudentYear < 1 || b.StudentYear > 5)) {
-          throw new ApiError(400, "Invalid StudentYear");
+      if (t.school) {
+        t.school = await validateSchool(t.school);
+      } else {
+        if (t.branches?.length) {
+          throw new ApiError(
+            400,
+            "Cannot select branch without selecting school",
+          );
         }
+        continue;
+      }
 
+      for (const b of t.branches || []) {
+        if (!b.branch) {
+          throw new ApiError(400, "Branch is required if selected");
+        }
         b.branch = await validateBranch(b.branch, t.school);
 
+        if (b.StudentYear != null) {
+          if (!t.school || !b.branch) {
+            throw new ApiError(
+              400,
+              "Cannot select year without selecting school and branch",
+            );
+          }
+          if (b.StudentYear < 1 || b.StudentYear > 5) {
+            throw new ApiError(400, "Invalid StudentYear");
+          }
+        }
+
         if (b.divisions?.length) {
+          if (!t.school || !b.branch || b.StudentYear == null) {
+            throw new ApiError(
+              400,
+              "Cannot select divisions without selecting school, branch, and year",
+            );
+          }
+
           let divisionIds = [];
           for (let k = 0; k < b.divisions.length; k++) {
             const divisionId = await validateDivision(b.divisions[k], b.branch);
@@ -568,7 +630,7 @@ const modifyEvent = asyncHandler(async (req, res) => {
   return res
     .status(200)
     .json(new ApiResponse(200, event, "Event updated successfully"));
-});
+}); // complete
 
 const createBranch = asyncHandler(async (req, res) => {
   try {
@@ -603,7 +665,7 @@ const createBranch = asyncHandler(async (req, res) => {
   } catch (error) {
     throw new ApiError(404, "Error while creating branch");
   }
-});
+}); // complete
 
 const createSchool = asyncHandler(async (req, res) => {
   try {
@@ -635,7 +697,7 @@ const createSchool = asyncHandler(async (req, res) => {
   } catch (error) {
     throw new ApiError(404, "Error while creating school");
   }
-});
+}); // complete
 
 const createDivision = asyncHandler(async (req, res) => {
   try {
@@ -672,7 +734,7 @@ const createDivision = asyncHandler(async (req, res) => {
   } catch (error) {
     throw new ApiError(404, "Error while creating division");
   }
-});
+}); // complete
 
 const getBranch = asyncHandler(async (req, res) => {
   const { name, school } = await req.body;
@@ -690,7 +752,7 @@ const getBranch = asyncHandler(async (req, res) => {
   return res
     .status(200)
     .json(new ApiResponse(200, { branch }, "Branch fetched successfully"));
-});
+}); // complete
 
 const getSchool = asyncHandler(async (req, res) => {
   const { name } = await req.body;
@@ -706,7 +768,7 @@ const getSchool = asyncHandler(async (req, res) => {
   return res
     .status(200)
     .json(new ApiResponse(200, { school }, "School fetched successfully"));
-});
+}); // complete
 
 const getDivision = asyncHandler(async (req, res) => {
   const { name, branch } = req.body;
@@ -721,7 +783,7 @@ const getDivision = asyncHandler(async (req, res) => {
   return res
     .status(200)
     .json(new ApiResponse(200, { division }, "Division fetched successfully"));
-});
+}); // complete
 
 const modifyBranch = asyncHandler(async (req, res) => {
   try {
@@ -781,7 +843,7 @@ const modifyBranch = asyncHandler(async (req, res) => {
   } catch (error) {
     throw new ApiError(404, "Error while modifying event");
   }
-});
+}); // complete
 
 const modifySchool = asyncHandler(async (req, res) => {
   if (req.user.role !== "Admin") {
@@ -831,7 +893,7 @@ const modifySchool = asyncHandler(async (req, res) => {
   res
     .status(200)
     .json(new ApiResponse(200, school, "School updated successfully"));
-});
+}); // complete
 
 const modifyDivision = asyncHandler(async (req, res) => {
   if (req.user.role !== "Admin") {
@@ -888,7 +950,7 @@ const modifyDivision = asyncHandler(async (req, res) => {
   res
     .status(200)
     .json(new ApiResponse(200, division, "Division updated successfully"));
-});
+}); // complete
 
 const deleteBranch = asyncHandler(async (req, res) => {
   if (req.user.role !== "Admin") {
@@ -911,7 +973,7 @@ const deleteBranch = asyncHandler(async (req, res) => {
   await branch.save();
 
   res.status(200).json(new ApiResponse(200, {}, "Branch deleted successfully"));
-});
+}); // complete
 
 const deleteDivision = asyncHandler(async (req, res) => {
   if (req.user.role !== "Admin") {
@@ -936,7 +998,7 @@ const deleteDivision = asyncHandler(async (req, res) => {
   res
     .status(200)
     .json(new ApiResponse(200, {}, "Division deleted successfully"));
-});
+}); // complete
 
 const deleteSchool = asyncHandler(async (req, res) => {
   if (req.user.role !== "Admin") {
@@ -959,7 +1021,7 @@ const deleteSchool = asyncHandler(async (req, res) => {
   await school.save();
 
   res.status(200).json(new ApiResponse(200, {}, "School deleted successfully"));
-});
+}); // complete
 
 export {
   getBranch,
@@ -991,34 +1053,61 @@ export {
 
 //faculty
 
+const getDivisionCount = async (branchId) => {
+  if (!branchId) return 0;
+
+  const count = await Division.countDocuments({
+    branch: branchId,
+    isDeleted: { $ne: true },
+  });
+
+  return count;
+}; // complete
+
 const determineEventLevel = async (parsedTargets) => {
-  if (!parsedTargets || parsedTargets.length === 0)
+  if (!parsedTargets || parsedTargets.length === 0) {
     return { level: "College", status: "Pending" };
-  if (parsedTargets.length > 1) return { level: "College", status: "Pending" };
+  }
+
+  if (parsedTargets.length > 1) {
+    return { level: "College", status: "Pending" };
+  }
 
   const schoolTarget = parsedTargets[0];
 
-  const branchIds = schoolTarget.branches
-    .filter((b) => b.branch)
-    .map((b) => b.branch.toString());
+  if (!schoolTarget.branches || schoolTarget.branches.length === 0) {
+    return { level: "School", status: "Pending" };
+  }
 
-  const uniqueBranchCount = new Set(branchIds).size;
-  const multipleBranches =
-    uniqueBranchCount > 1 || schoolTarget.branches.some((b) => !b.branch);
-  if (multipleBranches) return { level: "School", status: "Pending" };
+  const validBranches = schoolTarget.branches.filter((b) => b.branch);
 
-  const branchObj = schoolTarget.branches[0];
+  const uniqueBranchCount = new Set(
+    validBranches.map((b) => b.branch.toString()),
+  ).size;
+
+  if (uniqueBranchCount > 1) {
+    return { level: "School", status: "Pending" };
+  }
+
+  const branchObj = validBranches[0];
+
+  if (branchObj.StudentYear == null) {
+    return { level: "Branch", status: "Pending" };
+  }
 
   let totalDivisions = 0;
-  if (branchObj.branch)
+  if (branchObj.branch) {
     totalDivisions = await getDivisionCount(branchObj.branch);
+  }
+
   const divisionsSelected = branchObj.divisions?.length || 0;
 
-  if (divisionsSelected === 0 || divisionsSelected === totalDivisions)
+  if (divisionsSelected === 0 || divisionsSelected === totalDivisions) {
     return { level: "Branch", status: "Pending" };
+  }
 
   return { level: "Division", status: "Approved" };
-};
+}; // complete
 
 // Create event
 const createEventFaculty = asyncHandler(async (req, res) => {
@@ -1035,8 +1124,8 @@ const createEventFaculty = asyncHandler(async (req, res) => {
     amount,
     targets,
   } = req.body;
-  const epsFile = req.files?.epsFile;
-  const photo = req.files?.photo;
+  const epsFile = req.files?.epsFile[0];
+  const photo = req.files?.photo[0];
 
   if (!name || !detail || !startTime || !venue || !targets || !epsFile) {
     throw new ApiError(400, "Missing required fields");
@@ -1055,16 +1144,44 @@ const createEventFaculty = asyncHandler(async (req, res) => {
   const parsedTargets = JSON.parse(targets);
 
   for (const t of parsedTargets) {
-    t.school = await validateSchool(t.school);
-
-    for (const b of t.branches) {
-      if (b.StudentYear != null && (b.StudentYear < 1 || b.StudentYear > 5)) {
-        throw new ApiError(400, "Invalid StudentYear");
+    if (t.school) {
+      t.school = await validateSchool(t.school);
+    } else {
+      if (t.branches?.length) {
+        throw new ApiError(
+          400,
+          "Cannot select branch without selecting school",
+        );
       }
+      continue;
+    }
 
+    for (const b of t.branches || []) {
+      if (!b.branch) {
+        throw new ApiError(400, "Branch is required if selected");
+      }
       b.branch = await validateBranch(b.branch, t.school);
 
+      if (b.StudentYear != null) {
+        if (!t.school || !b.branch) {
+          throw new ApiError(
+            400,
+            "Cannot select year without selecting school and branch",
+          );
+        }
+        if (b.StudentYear < 1 || b.StudentYear > 5) {
+          throw new ApiError(400, "Invalid StudentYear");
+        }
+      }
+
       if (b.divisions?.length) {
+        if (!t.school || !b.branch || b.StudentYear == null) {
+          throw new ApiError(
+            400,
+            "Cannot select divisions without selecting school, branch, and year",
+          );
+        }
+
         let divisionIds = [];
         for (let k = 0; k < b.divisions.length; k++) {
           const divisionId = await validateDivision(b.divisions[k], b.branch);
@@ -1097,8 +1214,8 @@ const createEventFaculty = asyncHandler(async (req, res) => {
   const event = await Event.create({
     name,
     detail,
-    ...(uploadedPhoto && { photo: uploadedPhoto }),
-    epsFile: uploadedEps,
+    photo: uploadedPhoto || null,
+    eps: uploadedEps,
     organizedBy: req.user._id,
     targets: parsedTargets,
     startTime,
@@ -1114,7 +1231,7 @@ const createEventFaculty = asyncHandler(async (req, res) => {
   res
     .status(201)
     .json(new ApiResponse(201, event, "Event created successfully"));
-});
+}); // complete
 
 // HoD
 
@@ -1134,8 +1251,8 @@ const createEventHoD = asyncHandler(async (req, res) => {
     targets,
   } = req.body;
 
-  const epsFile = req.files?.epsFile;
-  const photo = req.files?.photo;
+  const epsFile = req.files?.epsFile[0];
+  const photo = req.files?.photo[0];
 
   if (!name || !detail || !startTime || !venue || !targets || !epsFile) {
     throw new ApiError(400, "Missing required fields");
@@ -1155,16 +1272,44 @@ const createEventHoD = asyncHandler(async (req, res) => {
   const parsedTargets = JSON.parse(targets);
 
   for (const t of parsedTargets) {
-    t.school = await validateSchool(t.school);
-
-    for (const b of t.branches) {
-      if (b.StudentYear != null && (b.StudentYear < 1 || b.StudentYear > 5)) {
-        throw new ApiError(400, "Invalid StudentYear");
+    if (t.school) {
+      t.school = await validateSchool(t.school);
+    } else {
+      if (t.branches?.length) {
+        throw new ApiError(
+          400,
+          "Cannot select branch without selecting school",
+        );
       }
+      continue;
+    }
 
+    for (const b of t.branches || []) {
+      if (!b.branch) {
+        throw new ApiError(400, "Branch is required if selected");
+      }
       b.branch = await validateBranch(b.branch, t.school);
 
+      if (b.StudentYear != null) {
+        if (!t.school || !b.branch) {
+          throw new ApiError(
+            400,
+            "Cannot select year without selecting school and branch",
+          );
+        }
+        if (b.StudentYear < 1 || b.StudentYear > 5) {
+          throw new ApiError(400, "Invalid StudentYear");
+        }
+      }
+
       if (b.divisions?.length) {
+        if (!t.school || !b.branch || b.StudentYear == null) {
+          throw new ApiError(
+            400,
+            "Cannot select divisions without selecting school, branch, and year",
+          );
+        }
+
         let divisionIds = [];
         for (let k = 0; k < b.divisions.length; k++) {
           const divisionId = await validateDivision(b.divisions[k], b.branch);
@@ -1189,18 +1334,18 @@ const createEventHoD = asyncHandler(async (req, res) => {
     status = "Approved";
   }
 
-  const uploadedEps = await uploadToCloudinary(epsFile.buffer, "events/eps");
+  const uploadedEps = await uploadToCloudinary(epsFile, "events/eps");
 
   let uploadedPhoto = null;
   if (photo) {
-    uploadedPhoto = await uploadToCloudinary(photo.buffer, "events/photo");
+    uploadedPhoto = await uploadToCloudinary(photo, "events/photo");
   }
 
   const event = await Event.create({
     name,
     detail,
-    ...(uploadedPhoto && { photo: uploadedPhoto }),
-    epsFile: uploadedEps,
+    photo: uploadedPhoto || null,
+    eps: uploadedEps,
     organizedBy: req.user._id,
     targets: parsedTargets,
     startTime,
@@ -1216,7 +1361,7 @@ const createEventHoD = asyncHandler(async (req, res) => {
   res
     .status(201)
     .json(new ApiResponse(201, event, "Event created successfully"));
-});
+}); // complete
 
 // Dean
 
@@ -1236,8 +1381,8 @@ const createEventDean = asyncHandler(async (req, res) => {
     targets,
   } = req.body;
 
-  const epsFile = req.files?.epsFile;
-  const photo = req.files?.photo;
+  const epsFile = req.files?.epsFile[0];
+  const photo = req.files?.photo[0];
 
   if (!name || !detail || !startTime || !venue || !targets || !epsFile) {
     throw new ApiError(400, "Missing required fields");
@@ -1257,16 +1402,44 @@ const createEventDean = asyncHandler(async (req, res) => {
   const parsedTargets = JSON.parse(targets);
 
   for (const t of parsedTargets) {
-    t.school = await validateSchool(t.school);
-
-    for (const b of t.branches) {
-      if (b.StudentYear != null && (b.StudentYear < 1 || b.StudentYear > 5)) {
-        throw new ApiError(400, "Invalid StudentYear");
+    if (t.school) {
+      t.school = await validateSchool(t.school);
+    } else {
+      if (t.branches?.length) {
+        throw new ApiError(
+          400,
+          "Cannot select branch without selecting school",
+        );
       }
+      continue;
+    }
 
+    for (const b of t.branches || []) {
+      if (!b.branch) {
+        throw new ApiError(400, "Branch is required if selected");
+      }
       b.branch = await validateBranch(b.branch, t.school);
 
+      if (b.StudentYear != null) {
+        if (!t.school || !b.branch) {
+          throw new ApiError(
+            400,
+            "Cannot select year without selecting school and branch",
+          );
+        }
+        if (b.StudentYear < 1 || b.StudentYear > 5) {
+          throw new ApiError(400, "Invalid StudentYear");
+        }
+      }
+
       if (b.divisions?.length) {
+        if (!t.school || !b.branch || b.StudentYear == null) {
+          throw new ApiError(
+            400,
+            "Cannot select divisions without selecting school, branch, and year",
+          );
+        }
+
         let divisionIds = [];
         for (let k = 0; k < b.divisions.length; k++) {
           const divisionId = await validateDivision(b.divisions[k], b.branch);
@@ -1294,18 +1467,18 @@ const createEventDean = asyncHandler(async (req, res) => {
     status = "Approved";
   }
 
-  const uploadedEps = await uploadToCloudinary(epsFile.buffer, "events/eps");
+  const uploadedEps = await uploadToCloudinary(epsFile, "events/eps");
 
   let uploadedPhoto = null;
   if (photo) {
-    uploadedPhoto = await uploadToCloudinary(photo.buffer, "events/photo");
+    uploadedPhoto = await uploadToCloudinary(photo, "events/photo");
   }
 
   const event = await Event.create({
     name,
     detail,
-    ...(uploadedPhoto && { photo: uploadedPhoto }),
-    epsFile: uploadedEps,
+    photo: uploadedPhoto || null,
+    eps: uploadedEps,
     organizedBy: req.user._id,
     targets: parsedTargets,
     startTime,
@@ -1321,7 +1494,7 @@ const createEventDean = asyncHandler(async (req, res) => {
   res
     .status(201)
     .json(new ApiResponse(201, event, "Event created successfully"));
-});
+}); // complete
 
 // Director
 
@@ -1341,8 +1514,8 @@ const createEventDirector = asyncHandler(async (req, res) => {
     targets,
   } = req.body;
 
-  const epsFile = req.files?.epsFile;
-  const photo = req.files?.photo;
+  const epsFile = req.files?.epsFile[0];
+  const photo = req.files?.photo[0];
 
   if (!name || !detail || !startTime || !venue || !targets || !epsFile) {
     throw new ApiError(400, "Missing required fields");
@@ -1362,16 +1535,44 @@ const createEventDirector = asyncHandler(async (req, res) => {
   const parsedTargets = JSON.parse(targets);
 
   for (const t of parsedTargets) {
-    t.school = await validateSchool(t.school);
-
-    for (const b of t.branches) {
-      if (b.StudentYear != null && (b.StudentYear < 1 || b.StudentYear > 5)) {
-        throw new ApiError(400, "Invalid StudentYear");
+    if (t.school) {
+      t.school = await validateSchool(t.school);
+    } else {
+      if (t.branches?.length) {
+        throw new ApiError(
+          400,
+          "Cannot select branch without selecting school",
+        );
       }
+      continue;
+    }
 
+    for (const b of t.branches || []) {
+      if (!b.branch) {
+        throw new ApiError(400, "Branch is required if selected");
+      }
       b.branch = await validateBranch(b.branch, t.school);
 
+      if (b.StudentYear != null) {
+        if (!t.school || !b.branch) {
+          throw new ApiError(
+            400,
+            "Cannot select year without selecting school and branch",
+          );
+        }
+        if (b.StudentYear < 1 || b.StudentYear > 5) {
+          throw new ApiError(400, "Invalid StudentYear");
+        }
+      }
+
       if (b.divisions?.length) {
+        if (!t.school || !b.branch || b.StudentYear == null) {
+          throw new ApiError(
+            400,
+            "Cannot select divisions without selecting school, branch, and year",
+          );
+        }
+
         let divisionIds = [];
         for (let k = 0; k < b.divisions.length; k++) {
           const divisionId = await validateDivision(b.divisions[k], b.branch);
@@ -1392,17 +1593,17 @@ const createEventDirector = asyncHandler(async (req, res) => {
 
   let { level, status } = await determineEventLevel(parsedTargets);
 
-  const uploadedEps = await uploadToCloudinary(epsFile.buffer, "events/eps");
+  const uploadedEps = await uploadToCloudinary(epsFile, "events/eps");
 
   let uploadedPhoto = null;
   if (photo) {
-    uploadedPhoto = await uploadToCloudinary(photo.buffer, "events/photo");
+    uploadedPhoto = await uploadToCloudinary(photo, "events/photo");
   }
 
   const event = await Event.create({
     name,
     detail,
-    ...(uploadedPhoto && { photo: uploadedPhoto }),
+    photo: uploadedPhoto || null,
     epsFile: uploadedEps,
     organizedBy: req.user._id,
     targets: parsedTargets,
@@ -1419,7 +1620,7 @@ const createEventDirector = asyncHandler(async (req, res) => {
   res
     .status(201)
     .json(new ApiResponse(201, event, "Event created successfully"));
-});
+}); // complete
 
 // Club
 
@@ -1439,8 +1640,8 @@ const createEventClub = asyncHandler(async (req, res) => {
     targets,
   } = req.body;
 
-  const epsFile = req.files?.epsFile;
-  const photo = req.files?.photo;
+  const epsFile = req.files?.epsFile[0];
+  const photo = req.files?.photo[0];
 
   if (!name || !detail || !startTime || !venue || !targets || !epsFile) {
     throw new ApiError(400, "Missing required fields");
@@ -1460,16 +1661,44 @@ const createEventClub = asyncHandler(async (req, res) => {
   const parsedTargets = JSON.parse(targets);
 
   for (const t of parsedTargets) {
-    t.school = await validateSchool(t.school);
-
-    for (const b of t.branches) {
-      if (b.StudentYear != null && (b.StudentYear < 1 || b.StudentYear > 5)) {
-        throw new ApiError(400, "Invalid StudentYear");
+    if (t.school) {
+      t.school = await validateSchool(t.school);
+    } else {
+      if (t.branches?.length) {
+        throw new ApiError(
+          400,
+          "Cannot select branch without selecting school",
+        );
       }
+      continue;
+    }
 
+    for (const b of t.branches || []) {
+      if (!b.branch) {
+        throw new ApiError(400, "Branch is required if selected");
+      }
       b.branch = await validateBranch(b.branch, t.school);
 
+      if (b.StudentYear != null) {
+        if (!t.school || !b.branch) {
+          throw new ApiError(
+            400,
+            "Cannot select year without selecting school and branch",
+          );
+        }
+        if (b.StudentYear < 1 || b.StudentYear > 5) {
+          throw new ApiError(400, "Invalid StudentYear");
+        }
+      }
+
       if (b.divisions?.length) {
+        if (!t.school || !b.branch || b.StudentYear == null) {
+          throw new ApiError(
+            400,
+            "Cannot select divisions without selecting school, branch, and year",
+          );
+        }
+
         let divisionIds = [];
         for (let k = 0; k < b.divisions.length; k++) {
           const divisionId = await validateDivision(b.divisions[k], b.branch);
@@ -1494,17 +1723,17 @@ const createEventClub = asyncHandler(async (req, res) => {
     throw new ApiError(404, "Club can not create division level event");
   }
 
-  const uploadedEps = await uploadToCloudinary(epsFile.buffer, "events/eps");
+  const uploadedEps = await uploadToCloudinary(epsFile, "events/eps");
 
   let uploadedPhoto = null;
   if (photo) {
-    uploadedPhoto = await uploadToCloudinary(photo.buffer, "events/photo");
+    uploadedPhoto = await uploadToCloudinary(photo, "events/photo");
   }
 
   const event = await Event.create({
     name,
     detail,
-    ...(uploadedPhoto && { photo: uploadedPhoto }),
+    photo: uploadedPhoto || null,
     epsFile: uploadedEps,
     organizedBy: req.user._id,
     targets: parsedTargets,
@@ -1521,10 +1750,10 @@ const createEventClub = asyncHandler(async (req, res) => {
   res
     .status(201)
     .json(new ApiResponse(201, event, "Event created successfully"));
-});
-``;
+}); // complete
 
 export {
+  getDivisionCount,
   determineEventLevel,
   createEventFaculty,
   createEventHoD,

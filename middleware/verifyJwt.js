@@ -4,10 +4,10 @@ import { asyncHandler } from "../utils/asyncHandler.js";
 import jwt from "jsonwebtoken";
 import { User } from "../models/user.js";
 
-const verifyJWT = asyncHandler(async (req, res) => {
+const verifyJWT = asyncHandler(async (req, res, next) => {
   try {
     const token =
-      req.cookie?.accessToken ||
+      req.cookies?.accessToken ||
       req.header("Authorization")?.replace("Bearer ", "");
 
     if (!token) {
@@ -20,7 +20,7 @@ const verifyJWT = asyncHandler(async (req, res) => {
       throw new ApiError(404, "Decoded token not found");
     }
 
-    const user = await User.findById(decodeToken?.id).select(
+    const user = await User.findById(decodeToken?._id).select(
       "-refreshToken -emailVerificationToken -emailVerificationExpiry -password -forgetPasswordToken -forgetPasswordExpiry",
     );
 
@@ -30,8 +30,35 @@ const verifyJWT = asyncHandler(async (req, res) => {
     req.user = user;
     next();
   } catch (error) {
+    console.log(error);
+
     throw new ApiError(404, "Error in jwt verify");
   }
 });
 
 export { verifyJWT };
+
+// export const verifyJWT = asyncHandler(async (req, res, next) => {
+//   const token =
+//     req.cookies?.accessToken ||
+//     req.header("Authorization")?.replace("Bearer ", "");
+
+//   if (!token) {
+//     throw new ApiError(401, "Unotherized User!");
+//   }
+
+//   try {
+//     const decodedToken = jwt.verify(token, process.env.ACCESS_TOKEN_SECRET);
+//     const user = await User.findById(decodedToken?._id).select(
+//       "-password -refreshToken -emailVerificationToken -emailVerificationExpiry",
+//     );
+
+//     if (!user) {
+//       throw new ApiError(401, "Invalid access token");
+//     }
+//     req.user = user;
+//     next();
+//   } catch (error) {
+//     throw new ApiError(401, "Invalid access token");
+//   }
+// });
