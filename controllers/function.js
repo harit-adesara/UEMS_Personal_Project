@@ -215,10 +215,10 @@ const getEvent = asyncHandler(async (req, res) => {
         filter.status = req.query.status;
       }
       if (req.query.organizedBy) {
-        filter.organizedBy = req.query.organizedBy;
+        filter.organizedBy = { $regex: req.query.organizedBy, $options: "i" };
       }
       if (req.query.name) {
-        filter.name = req.query.name;
+        filter.name = { $regex: req.query.name, $options: "i" };
       }
 
       const sortOrder =
@@ -235,7 +235,7 @@ const getEvent = asyncHandler(async (req, res) => {
   } catch (error) {
     throw new ApiError(404, "Event not found");
   }
-}); // complete
+}); // complete //
 
 const getUser = asyncHandler(async (req, res) => {
   try {
@@ -488,7 +488,10 @@ const modifyEvent = asyncHandler(async (req, res) => {
 
     const name = updates.name || event.name;
 
-    const existing = await Event.findOne({ name, year });
+    const existing = await Event.findOne({ name, year }).collation({
+      locale: "en",
+      strength: 2,
+    });
 
     if (existing && existing._id.toString() !== eventId) {
       throw new ApiError(
@@ -629,7 +632,7 @@ const modifyEvent = asyncHandler(async (req, res) => {
   return res
     .status(200)
     .json(new ApiResponse(200, event, "Event updated successfully"));
-}); // complete
+}); // complete //
 
 const createBranch = asyncHandler(async (req, res) => {
   try {
@@ -1193,7 +1196,10 @@ const createEventFaculty = asyncHandler(async (req, res) => {
 
   const year = new Date(startTime).getFullYear();
 
-  const existing = await Event.findOne({ name, year });
+  const existing = await Event.findOne({ name, year }).collation({
+    locale: "en",
+    strength: 2,
+  });
 
   if (existing) {
     throw new ApiError(400, `Event "${name}" already exists for year ${year}`);
@@ -1230,7 +1236,7 @@ const createEventFaculty = asyncHandler(async (req, res) => {
   res
     .status(201)
     .json(new ApiResponse(201, event, "Event created successfully"));
-}); // complete
+}); // complete //
 
 // HoD
 
@@ -1321,7 +1327,10 @@ const createEventHoD = asyncHandler(async (req, res) => {
 
   const year = new Date(startTime).getFullYear();
 
-  const existing = await Event.findOne({ name, year });
+  const existing = await Event.findOne({ name, year }).collation({
+    locale: "en",
+    strength: 2,
+  });
 
   if (existing) {
     throw new ApiError(400, `Event "${name}" already exists for year ${year}`);
@@ -1360,7 +1369,7 @@ const createEventHoD = asyncHandler(async (req, res) => {
   res
     .status(201)
     .json(new ApiResponse(201, event, "Event created successfully"));
-}); // complete
+}); // complete //
 
 // Dean
 
@@ -1451,7 +1460,10 @@ const createEventDean = asyncHandler(async (req, res) => {
 
   const year = new Date(startTime).getFullYear();
 
-  const existing = await Event.findOne({ name, year });
+  const existing = await Event.findOne({ name, year }).collation({
+    locale: "en",
+    strength: 2,
+  });
 
   if (existing) {
     throw new ApiError(400, `Event "${name}" already exists for year ${year}`);
@@ -1493,7 +1505,7 @@ const createEventDean = asyncHandler(async (req, res) => {
   res
     .status(201)
     .json(new ApiResponse(201, event, "Event created successfully"));
-}); // complete
+}); // complete //
 
 // Director
 
@@ -1584,7 +1596,10 @@ const createEventDirector = asyncHandler(async (req, res) => {
 
   const year = new Date(startTime).getFullYear();
 
-  const existing = await Event.findOne({ name, year });
+  const existing = await Event.findOne({ name, year }).collation({
+    locale: "en",
+    strength: 2,
+  });
 
   if (existing) {
     throw new ApiError(400, `Event "${name}" already exists for year ${year}`);
@@ -1619,7 +1634,7 @@ const createEventDirector = asyncHandler(async (req, res) => {
   res
     .status(201)
     .json(new ApiResponse(201, event, "Event created successfully"));
-}); // complete
+}); // complete //
 
 // Club
 
@@ -1710,7 +1725,10 @@ const createEventClub = asyncHandler(async (req, res) => {
 
   const year = new Date(startTime).getFullYear();
 
-  const existing = await Event.findOne({ name, year });
+  const existing = await Event.findOne({ name, year }).collation({
+    locale: "en",
+    strength: 2,
+  });
 
   if (existing) {
     throw new ApiError(400, `Event "${name}" already exists for year ${year}`);
@@ -1749,7 +1767,7 @@ const createEventClub = asyncHandler(async (req, res) => {
   res
     .status(201)
     .json(new ApiResponse(201, event, "Event created successfully"));
-}); // complete
+}); // complete //
 
 export {
   getDivisionCount,

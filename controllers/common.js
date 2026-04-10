@@ -57,7 +57,10 @@ const modifyEventBeforeApproveCommon = asyncHandler(async (req, res) => {
 
     const name = updates.name || event.name;
 
-    const existing = await Event.findOne({ name, year });
+    const existing = await Event.findOne({ name, year }).collation({
+      locale: "en",
+      strength: 2,
+    });
 
     if (existing && existing._id.toString() !== eventId) {
       throw new ApiError(
@@ -338,10 +341,10 @@ const getEventCommon = asyncHandler(async (req, res) => {
     filter.status = req.query.status;
   }
   if (req.query.organizedBy) {
-    filter.organizedBy = req.query.organizedBy;
+    filter.organizedBy = { $regex: req.query.organizedBy, $options: "i" };
   }
   if (req.query.name) {
-    filter.name = req.query.name;
+    filter.name = { $regex: req.query.name, $options: "i" };
   }
 
   const sortOrder =
@@ -389,7 +392,7 @@ const myEvent = asyncHandler(async (req, res) => {
     }
 
     if (req.query.name) {
-      filter.name = req.query.name;
+      filter.name = { $regex: req.query.name, $options: "i" };
     }
 
     const sortOrder =
