@@ -91,7 +91,6 @@ const validateDivision = async (division, branch) => {
     divisionObj = await Division.findOne({
       name: division,
       branch: branchId,
-      ś,
     });
   }
 
