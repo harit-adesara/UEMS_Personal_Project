@@ -38,6 +38,10 @@ const login = asyncHandler(async (req, res) => {
     throw new ApiError(404, "User not found");
   }
 
+  if (!user.isEmailVerified) {
+    throw new ApiError(404, "Authorize your email");
+  }
+
   if (user.status === "inactive" || user.status === "deleted") {
     throw new ApiError(404, "Not authorized");
   }
@@ -122,6 +126,7 @@ const registerUser = asyncHandler(async (req, res) => {
 
   user.status = "active";
   user.password = password;
+  user.isEmailVerified = true;
   user.emailVerificationToken = "";
   user.emailVerificationExpiry = "";
   await user.save();

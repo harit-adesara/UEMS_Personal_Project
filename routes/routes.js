@@ -182,6 +182,7 @@ router.post(
     { name: "epsFile", maxCount: 1 },
     { name: "photo", maxCount: 1 },
   ]),
+  verifyJWT,
   createEventValidator(),
   createEventDirector,
 );
@@ -192,6 +193,7 @@ router.post(
     { name: "epsFile", maxCount: 1 },
     { name: "photo", maxCount: 1 },
   ]),
+  verifyJWT,
   createEventValidator(),
   createEventFaculty,
 );
@@ -213,6 +215,7 @@ router.post(
     { name: "epsFile", maxCount: 1 },
     { name: "photo", maxCount: 1 },
   ]),
+  verifyJWT,
   createEventValidator(),
   createEventDean,
 );

@@ -127,21 +127,51 @@ const modifyEventBeforeApproveCommon = asyncHandler(async (req, res) => {
 
     ({ level, status } = await determineEventLevel(parsedTargets));
 
-    if (req.user.role === "Faculty" && level === "Division")
-      status = "Approved";
+    if (req.user.role === "Faculty") {
+      if (level === "Division") {
+        const target = parsedTargets[0];
+        const branchId = target.branches[0].branch.toString();
+        const schoolId = target.school.toString();
 
-    if (req.user.role === "HoD" && ["Division", "School"].includes(level))
-      status = "Approved";
+        const isOwnScope =
+          branchId === req.user.branch.toString() &&
+          schoolId === req.user.school.toString();
 
-    if (
-      req.user.role === "Dean" &&
-      ["Division", "School", "College"].includes(level)
-    )
-      status = "Approved";
+        status = isOwnScope ? "Approved" : "Pending";
+      } else {
+        status = "Pending";
+      }
+    } else if (req.user.role === "HoD") {
+      if (["Division", "Branch"].includes(level)) {
+        const target = parsedTargets[0];
+        const branch = target.branches[0].branch.toString();
+        const school = target.school.toString();
 
-    if (req.user.role === "Club" && level === "Division") {
-      status = "Pending";
-      throw new ApiError(404, "Club can not create division level event");
+        const isOwn =
+          req.user.school.toString() === school &&
+          req.user.branch.toString() === branch;
+
+        status = isOwn ? "Approved" : "Pending";
+      } else {
+        status = "Pending";
+      }
+    } else if (req.user.role === "Dean") {
+      if (["Division", "Branch", "School"].includes(level)) {
+        const target = parsedTargets[0];
+        const school = target.school.toString();
+        const isOwn = school === req.user.school;
+        status = isOwn ? "Approved" : "Pending";
+      } else {
+        status = "Pending";
+      }
+    } else if (req.user.role === "Club") {
+      if (level === "Division") {
+        throw new ApiError(404, "Club can not create division level event");
+      } else {
+        status = "Pending";
+      }
+    } else if (req.user.role === "Director") {
+      status = "Approved";
     }
 
     updates.targets = parsedTargets;
@@ -454,6 +484,7 @@ const getEventApprovalOrReject = asyncHandler(async (req, res) => {
     filter.level = "Branch";
     filter.targets = {
       $elemMatch: {
+        school: req.user.school,
         branches: {
           $elemMatch: { branch: req.user.branch },
         },

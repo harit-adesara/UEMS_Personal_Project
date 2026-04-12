@@ -1,25 +1,30 @@
 import cloudinary from "../db/cloudinary.js";
 import { ApiError } from "./api_error.js";
 
-export const uploadToCloudinary = (file, folder, type) => {
+export const uploadToCloudinary = (file, folder) => {
   return new Promise((resolve, reject) => {
-    console.log(Buffer.isBuffer(file));
-    console.log(Buffer.isBuffer(file.buffer));
-    console.log("MIMETYPE:", file.mimetype);
-
-    if (type === "image") {
-      const allowed = ["image/jpeg", "image/png", "image/jpg"];
-      if (!allowed.includes(file.mimetype)) {
-        return reject(new ApiError(422, "Only PNG/JPG image is allowed"));
-      }
-    }
-    if (type === "pdf") {
-      if (file.mimetype !== "application/pdf") {
-        return reject(new ApiError(422, "Only pdf is allowed"));
-      }
+    if (!file || !file.buffer) {
+      return reject(new ApiError(400, "File is required"));
     }
 
-    const resourceType = type === "pdf" ? "raw" : "image";
+    let resourceType;
+    let allowedMimeTypes = [];
+
+    if (file.mimetype === "application/pdf") {
+      resourceType = "raw";
+      allowedMimeTypes = ["application/pdf"];
+    } else if (file.mimetype.startsWith("image/")) {
+      resourceType = "image";
+      allowedMimeTypes = ["image/jpeg", "image/png", "image/jpg"];
+    } else {
+      return reject(new ApiError(422, "Unsupported file type"));
+    }
+
+    if (!allowedMimeTypes.includes(file.mimetype)) {
+      return reject(
+        new ApiError(422, "Only PDF or JPG/PNG images are allowed"),
+      );
+    }
 
     const stream = cloudinary.uploader.upload_stream(
       {
@@ -28,15 +33,16 @@ export const uploadToCloudinary = (file, folder, type) => {
       },
       (error, result) => {
         if (error) return reject(error);
+
         resolve({
           url: result.secure_url,
           public_id: result.public_id,
         });
       },
     );
-    stream.on("error", (err) => {
-      reject(err);
-    });
+
+    stream.on("error", (err) => reject(err));
+
     stream.end(file.buffer);
   });
 };

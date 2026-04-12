@@ -124,8 +124,10 @@ const createUser = asyncHandler(async (req, res) => {
     }
   }
 
-  if ((role === "HoD" || role === "Faculty") && !branch && !school) {
-    throw new ApiError(400, "Branch and School required for HoD");
+  if (role === "HoD" || role === "Faculty") {
+    if (!branch || !school) {
+      throw new ApiError(400, "Branch and School required");
+    }
   }
 
   if (role === "Dean" && !school) {
@@ -150,8 +152,14 @@ const createUser = asyncHandler(async (req, res) => {
       user.status = "inactive";
       user.year = role === "Student" ? year : undefined;
       user.roll_number = role === "Student" ? roll_number : undefined;
-      user.school = role === "Student" || role === "Dean" ? school : undefined;
-      user.branch = role === "Student" || role === "HoD" ? branch : undefined;
+      user.school =
+        role === "Student" || role === "Dean" || role === "Faculty"
+          ? school
+          : undefined;
+      user.branch =
+        role === "Student" || role === "HoD" || role === "Faculty"
+          ? branch
+          : undefined;
       user.division = role === "Student" ? division : undefined;
 
       user = await user.save();
@@ -167,8 +175,14 @@ const createUser = asyncHandler(async (req, res) => {
       role,
       year: role === "Student" ? year : undefined,
       roll_number: role === "Student" ? roll_number : undefined,
-      school: role === "Student" || role === "Dean" ? school : undefined,
-      branch: role === "Student" || role === "HoD" ? branch : undefined,
+      school:
+        role === "Student" || role === "Dean" || role === "Faculty"
+          ? school
+          : undefined,
+      branch:
+        role === "Student" || role === "HoD" || role === "Faculty"
+          ? branch
+          : undefined,
       division: role === "Student" ? division : undefined,
     });
   }
@@ -558,14 +572,58 @@ const modifyEvent = asyncHandler(async (req, res) => {
 
     ({ level, status } = await determineEventLevel(parsedTargets));
 
-    const organizer = await User.findById(event.organizedBy).select("role");
+    const organizer = await User.findById(event.organizedBy).populate(
+      "organizedBy",
+      "role branch school",
+    );
 
-    if (organizer.role === "Club" && level === "Division") {
-      throw new ApiError(
-        400,
-        "Club cannot create or modify to division level event",
-      );
+    if (organizer === "Faculty") {
+      if (level === "Division") {
+        const target = parsedTargets[0];
+        const branchId = target.branches[0].branch.toString();
+        const schoolId = target.school.toString();
+
+        const isOwnScope =
+          branchId === req.user.branch.toString() &&
+          schoolId === req.user.school.toString();
+
+        status = isOwnScope ? "Approved" : "Pending";
+      } else {
+        status = "Pending";
+      }
+    } else if (organizer === "HoD") {
+      if (["Division", "Branch"].includes(level)) {
+        const target = parsedTargets[0];
+        const branch = target.branches[0].branch.toString();
+        const school = target.school.toString();
+
+        const isOwn =
+          req.user.school.toString() === school &&
+          req.user.branch.toString() === branch;
+
+        status = isOwn ? "Approved" : "Pending";
+      } else {
+        status = "Pending";
+      }
+    } else if (req.user.role === "Dean") {
+      if (["Division", "Branch", "School"].includes(level)) {
+        const target = parsedTargets[0];
+        const school = target.school.toString();
+        const isOwn = school === req.user.school;
+        status = isOwn ? "Approved" : "Pending";
+      } else {
+        status = "Pending";
+      }
+    } else if (req.user.role === "Club") {
+      if (level === "Division") {
+        throw new ApiError(404, "Club can not create division level event");
+      } else {
+        status = "Pending";
+      }
+    } else if (req.user.role === "Director") {
+      status = "Approved";
     }
+
     updates.targets = parsedTargets;
   }
 
@@ -1207,8 +1265,18 @@ const createEventFaculty = asyncHandler(async (req, res) => {
 
   let { level, status } = await determineEventLevel(parsedTargets);
 
-  if (req.user.role === "Faculty" && level === "Division") {
-    status = "Approved";
+  if (level === "Division") {
+    const target = parsedTargets[0];
+    const branchId = target.branches[0].branch.toString();
+    const schoolId = target.school.toString();
+
+    const isOwnScope =
+      branchId === req.user.branch.toString() &&
+      schoolId === req.user.school.toString();
+
+    status = isOwnScope ? "Approved" : "Pending";
+  } else {
+    status = "Pending";
   }
 
   const uploadedEps = await uploadToCloudinary(epsFile, "events/eps", "pdf");
@@ -1338,8 +1406,18 @@ const createEventHoD = asyncHandler(async (req, res) => {
 
   let { level, status } = await determineEventLevel(parsedTargets);
 
-  if (req.user.role === "HoD" && ["Division", "Branch"].includes(level)) {
-    status = "Approved";
+  if (["Division", "Branch"].includes(level)) {
+    const target = parsedTargets[0];
+    const branch = target.branches[0].branch.toString();
+    const school = target.school.toString();
+
+    const isOwn =
+      req.user.school.toString() === school &&
+      req.user.branch.toString() === branch;
+
+    status = isOwn ? "Approved" : "Pending";
+  } else {
+    status = "Pending";
   }
 
   const uploadedEps = await uploadToCloudinary(epsFile, "events/eps");
@@ -1471,11 +1549,13 @@ const createEventDean = asyncHandler(async (req, res) => {
 
   let { level, status } = await determineEventLevel(parsedTargets);
 
-  if (
-    req.user.role === "Dean" &&
-    ["School", "Division", "Branch"].includes(level)
-  ) {
-    status = "Approved";
+  if (["Division", "Branch", "School"].includes(level)) {
+    const target = parsedTargets[0];
+    const school = target.school.toString();
+    const isOwn = school === req.user.school;
+    status = isOwn ? "Approved" : "Pending";
+  } else {
+    status = "Pending";
   }
 
   const uploadedEps = await uploadToCloudinary(epsFile, "events/eps");

@@ -17,3 +17,9 @@ connectDb()
     console.log("Not connected to DB");
     process.exit(1);
   });
+
+import bcrypt from "bcryptjs";
+const password = async () => {
+  console.log(await bcrypt.hash("12345", 10));
+};
+password();

@@ -221,7 +221,6 @@ const eventListStudent = asyncHandler(async (req, res) => {
   const { school, branch, year, division } = req.user;
   let filter = { status: "Accepted" };
 
-  // Date filter
   if (req.query.date) {
     const start = new Date(req.query.date);
     const end = new Date(req.query.date);

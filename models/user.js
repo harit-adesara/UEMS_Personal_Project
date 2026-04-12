@@ -118,7 +118,12 @@ userSchema.pre("save", function (next) {
   if (this.role === "Student" && !this.year) {
     return next(new Error("Student must have year"));
   }
-  if ((this.role === "HoD" || this.role === "Student") && !this.branch) {
+  if (
+    (this.role === "HoD" ||
+      this.role === "Student" ||
+      this.role === "Faculty") &&
+    !this.branch
+  ) {
     return next(new Error("HoD must have branch"));
   }
 
@@ -126,11 +131,19 @@ userSchema.pre("save", function (next) {
     return next(new Error("Dean must have school"));
   }
 
-  if (this.role !== "HoD" && this.role !== "Student") {
+  if (
+    this.role !== "HoD" &&
+    this.role !== "Student" &&
+    this.role !== "Faculty"
+  ) {
     this.branch = undefined;
   }
 
-  if (this.role !== "Dean" && this.role !== "Student") {
+  if (
+    this.role !== "Dean" &&
+    this.role !== "Student" &&
+    this.role !== "Faculty"
+  ) {
     this.school = undefined;
   }
 });
