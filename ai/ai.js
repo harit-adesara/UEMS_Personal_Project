@@ -7,6 +7,10 @@ import { Event } from "../models/event.js";
 import { School } from "../models/school.js";
 import { Branch } from "../models/branch.js";
 import { Division } from "../models/division.js";
+import dotenv, { config } from "dotenv";
+dotenv.config({
+  path: "./.env",
+});
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
@@ -33,18 +37,20 @@ function isUEMSRelated(message) {
   const msg = message.toLowerCase();
   return keywords.some((k) => msg.includes(k));
 }
-
-const removeMongoIds = (obj) => {
+const removeMongoIds = (obj, seen = new WeakSet()) => {
   if (Array.isArray(obj)) {
-    return obj.map(removeMongoIds);
+    return obj.map((item) => removeMongoIds(item, seen));
   }
 
   if (obj && typeof obj === "object") {
+    if (seen.has(obj)) return obj;
+    seen.add(obj);
+
     const clean = {};
 
     for (const key in obj) {
       if (key === "_id") continue;
-      clean[key] = removeMongoIds(obj[key]);
+      clean[key] = removeMongoIds(obj[key], seen);
     }
 
     return clean;
@@ -154,7 +160,7 @@ export const chatBot = asyncHandler(async (req, res) => {
     const detail = await data(user, message);
 
     const model = genAI.getGenerativeModel({
-      model: "gemini-1.5-flash",
+      model: "gemini-3-flash-preview",
     });
 
     res.setHeader("Content-Type", "text/plain; charset=utf-8");

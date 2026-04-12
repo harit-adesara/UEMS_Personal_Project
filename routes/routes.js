@@ -283,6 +283,6 @@ router.route("/payment/verify").post(verifyJWT, verifyPayment);
 
 // AI
 
-router.route("/chat", verifyJWT, chatBot);
+router.route("/chat").post(verifyJWT, chatBot);
 
 export { router };
