@@ -2,6 +2,8 @@ import express from "express";
 
 import { validate } from "../middleware/validate.js";
 
+import { chatBot } from "../ai/ai.js";
+
 import {
   attachUser,
   knownEmailLimiter,
@@ -165,8 +167,7 @@ import {
 
 import { upload } from "../db/multer.js";
 
-router.post(
-  "/event/club/create",
+router.route("/event/club/create").post(
   upload.fields([
     { name: "epsFile", maxCount: 1 },
     { name: "photo", maxCount: 1 },
@@ -176,8 +177,7 @@ router.post(
   createEventClub,
 );
 
-router.post(
-  "/event/director/create",
+router.route("/event/director/create").post(
   upload.fields([
     { name: "epsFile", maxCount: 1 },
     { name: "photo", maxCount: 1 },
@@ -187,8 +187,7 @@ router.post(
   createEventDirector,
 );
 
-router.post(
-  "/event/faculty/create",
+router.route("/event/faculty/create").post(
   upload.fields([
     { name: "epsFile", maxCount: 1 },
     { name: "photo", maxCount: 1 },
@@ -198,8 +197,7 @@ router.post(
   createEventFaculty,
 );
 
-router.post(
-  "/event/hod/create",
+router.route("/event/hod/create").post(
   upload.fields([
     { name: "epsFile", maxCount: 1 },
     { name: "photo", maxCount: 1 },
@@ -209,8 +207,7 @@ router.post(
   createEventHoD,
 ); // complete
 
-router.post(
-  "/event/dean/create",
+router.route("/event/dean/create").post(
   upload.fields([
     { name: "epsFile", maxCount: 1 },
     { name: "photo", maxCount: 1 },
@@ -222,39 +219,39 @@ router.post(
 // ------------------- ADMIN -------------------
 
 // User
-router.post("/user/create", verifyJWT, createUserValidator(), createUser);
+router.route("/user/create").post(verifyJWT, createUserValidator(), createUser);
 
-router.put("/user/modify", modifyUserValidator(), modifyUser);
+router.route("/user/modify").put(modifyUserValidator(), modifyUser);
 
-router.delete("/user/delete/:userId", deleteUser);
+router.route("/user/delete/:userId").delete(deleteUser);
 
-router.post("/user/get", getUser);
+router.route("/user/get").post(getUser);
 
-router.get("/event", getEvent);
+router.route("/event").get(getEvent);
 
-router.put("/event/approve/:eventId", eventStatusApprove);
+router.route("/event/approve/:eventId").put(eventStatusApprove);
 
 router.put("/event/reject/:eventId", eventStatusReject);
 
 router.put("/event/modify", modifyEventValidator, modifyEvent);
 
-router.post("/branch/create", createBranch);
+router.route("/branch/create").post(createBranch);
 
-router.put("/branch/modify", modifyBranch);
+router.route("/branch/modify").put(modifyBranch);
 
-router.delete("/branch/delete/:branchId", deleteBranch);
+router.route("/branch/delete/:branchId").delete(deleteBranch);
 
-router.post("/school/create", createSchool);
+router.route("/school/create").post(createSchool);
 
-router.put("/school/modify", modifySchool);
+router.route("/school/modify").put(modifySchool);
 
-router.delete("/school/delete/:schoolId", deleteSchool);
+router.route("/school/delete/:schoolId").delete(deleteSchool);
 
-router.post("/division/create", createDivision);
+router.route("/division/create").post(createDivision);
 
-router.put("/division/modify", modifyDivision);
+router.route("/division/modify").put(modifyDivision);
 
-router.delete("/division/delete/:divisionId", deleteDivision);
+router.route("/division/delete/:divisionId").delete(deleteDivision);
 
 import {
   addFeedback,
@@ -266,22 +263,26 @@ import {
   getStudentAttendance,
 } from "../controllers/student.js";
 
-router.post("/feedback", verifyJWT, addFeedback);
+router.route("/feedback").post(verifyJWT, addFeedback);
 
-router.post("/attendance/qr", verifyJWT, markAttendanceQR);
+router.route("/attendance/qr").post(verifyJWT, markAttendanceQR);
 
-router.post("/event/register/:eventId", verifyJWT, registerInEvent);
+router.route("/event/register/:eventId").post(verifyJWT, registerInEvent);
 
-router.get("/events", verifyJWT, eventListStudent);
+router.route("/events").get(verifyJWT, eventListStudent);
 
-router.get("/event/:eventId", verifyJWT, viewEventDetail);
+router.route("/event/:eventId").get(verifyJWT, viewEventDetail);
 
-router.get("/my-events", verifyJWT, myRegisteredEvent);
+router.route("/my-events").get(verifyJWT, myRegisteredEvent);
 
-router.get("/attendance/:studentId", verifyJWT, getStudentAttendance);
+router.route("/attendance/:studentId").get(verifyJWT, getStudentAttendance);
 
 import { verifyPayment } from "../controllers/verify_payment.js";
 
-router.post("/payment/verify", verifyJWT, verifyPayment);
+router.route("/payment/verify").post(verifyJWT, verifyPayment);
+
+// AI
+
+router.route("/chat", verifyJWT, chatBot);
 
 export { router };
