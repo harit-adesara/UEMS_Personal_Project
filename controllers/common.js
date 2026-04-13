@@ -486,15 +486,21 @@ const getEventApprovalOrReject = asyncHandler(async (req, res) => {
       $elemMatch: {
         school: req.user.school,
         branches: {
-          $elemMatch: { branch: req.user.branch },
+          $not: {
+            $elemMatch: {
+              branch: { $ne: req.user.branch },
+            },
+          },
         },
       },
     };
   } else if (req.user.role === "Dean") {
     filter.level = "School";
     filter.targets = {
-      $elemMatch: {
-        school: req.user.school,
+      $not: {
+        $elemMatch: {
+          school: { $ne: req.user.school },
+        },
       },
     };
   } else if (req.user.role === "Director") {
