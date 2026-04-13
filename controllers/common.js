@@ -23,9 +23,10 @@ import cloudinary from "../db/cloudinary.js";
 const deleteFromCloudinary = async (public_id, type) => {
   if (!public_id) return;
 
-  const resource_type = type === "pdf" ? "raw" : "image";
-
-  await cloudinary.uploader.destroy(public_id, { resource_type });
+  await cloudinary.uploader.destroy(public_id, {
+    resource_type: type,
+    invalidate: true,
+  });
 };
 
 const modifyEventBeforeApproveCommon = asyncHandler(async (req, res) => {
@@ -219,27 +220,26 @@ const modifyEventBeforeApproveCommon = asyncHandler(async (req, res) => {
   }
 
   const photoFile = req.files?.photo?.[0];
-  const epsFile = req.files?.eps?.[0];
+  const epsFile = req.files?.epsFile?.[0];
 
   if (photoFile) {
-    const uploadedPhoto = await uploadToCloudinary(
-      photoFile,
-      "events/photo",
-      "image",
-    );
+    const uploadedPhoto = await uploadToCloudinary(photoFile, "events/photo");
 
     if (event.photo?.public_id) {
-      await deleteFromCloudinary(event.photo.public_id, "image");
+      await deleteFromCloudinary(
+        event.photo.public_id,
+        event.photo.resourceType,
+      );
     }
 
     event.photo = uploadedPhoto;
   }
 
   if (epsFile) {
-    const uploadedEps = await uploadToCloudinary(epsFile, "events/eps", "pdf");
+    const uploadedEps = await uploadToCloudinary(epsFile, "events/eps");
 
     if (event.eps?.public_id) {
-      await deleteFromCloudinary(event.eps.public_id, "pdf");
+      await deleteFromCloudinary(event.eps.public_id, event.eps.resourceType);
     }
 
     event.eps = uploadedEps;
@@ -343,6 +343,12 @@ const deleteEventCommon = asyncHandler(async (req, res) => {
   if (event.status !== "Pending") {
     throw new ApiError(404, "Only pending event can be deleted");
   }
+
+  if (event.photo) {
+    await deleteFromCloudinary(event.photo.public_id, event.photo.resourceType);
+  }
+
+  await deleteFromCloudinary(event.eps.public_id, event.eps.resourceType);
 
   await event.deleteOne();
 

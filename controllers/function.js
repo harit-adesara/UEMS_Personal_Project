@@ -452,8 +452,10 @@ const deleteUser = asyncHandler(async (req, res) => {
 const deleteFromCloudinary = async (public_id, type) => {
   if (!public_id) return;
 
-  const resource_type = type === "pdf" ? "raw" : "image";
-  await cloudinary.uploader.destroy(public_id, { resource_type });
+  await cloudinary.uploader.destroy(public_id, {
+    resource_type: type,
+    invalidate: true,
+  });
 };
 
 const modifyEvent = asyncHandler(async (req, res) => {
@@ -659,24 +661,23 @@ const modifyEvent = asyncHandler(async (req, res) => {
   const epsFile = req.files?.eps?.[0];
 
   if (photoFile) {
-    const uploadedPhoto = await uploadToCloudinary(
-      photoFile,
-      "events/photo",
-      "image",
-    );
+    const uploadedPhoto = await uploadToCloudinary(photoFile, "events/photo");
 
     if (event.photo?.public_id) {
-      await deleteFromCloudinary(event.photo.public_id, "image");
+      await deleteFromCloudinary(
+        event.photo.public_id,
+        event.photo.resourceType,
+      );
     }
 
     event.photo = uploadedPhoto;
   }
 
   if (epsFile) {
-    const uploadedEps = await uploadToCloudinary(epsFile, "events/eps", "pdf");
+    const uploadedEps = await uploadToCloudinary(epsFile, "events/eps");
 
     if (event.eps?.public_id) {
-      await deleteFromCloudinary(event.eps.public_id, "pdf");
+      await deleteFromCloudinary(event.eps.public_id, event.eps.resourceType);
     }
 
     event.eps = uploadedEps;
@@ -1279,9 +1280,9 @@ const createEventFaculty = asyncHandler(async (req, res) => {
     status = "Pending";
   }
 
-  const uploadedEps = await uploadToCloudinary(epsFile, "events/eps", "pdf");
+  const uploadedEps = await uploadToCloudinary(epsFile, "events/eps");
   const uploadedPhoto = photo
-    ? await uploadToCloudinary(photo, "events/photo", "image")
+    ? await uploadToCloudinary(photo, "events/photo")
     : null;
 
   const event = await Event.create({

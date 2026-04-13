@@ -111,13 +111,15 @@ router.route("/logout").post(verifyJWT, logOut); // complete
 
 router.route("/change-password").post(verifyJWT, changePassword); //complete
 
-router
-  .route("/event/modify-before-approve/:eventId")
-  .post(
-    verifyJWT,
-    modifyEventBeforeApproveValidator(),
-    modifyEventBeforeApproveCommon,
-  );
+router.route("/event/modify-before-approve/:eventId").post(
+  verifyJWT,
+  upload.fields([
+    { name: "photo", maxCount: 1 },
+    { name: "epsFile", maxCount: 1 },
+  ]),
+  modifyEventBeforeApproveValidator(),
+  modifyEventBeforeApproveCommon,
+);
 
 router
   .route("/event/modify-after-approve/:eventId")

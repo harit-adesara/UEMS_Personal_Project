@@ -127,7 +127,10 @@ userSchema.pre("save", function (next) {
     return next(new Error("HoD must have branch"));
   }
 
-  if ((this.role === "Dean" || this.role === "Student") && !this.school) {
+  if (
+    (this.role === "Dean" || this.role === "Student" || this.role === "HoD") &&
+    !this.school
+  ) {
     return next(new Error("Dean must have school"));
   }
 
@@ -142,7 +145,8 @@ userSchema.pre("save", function (next) {
   if (
     this.role !== "Dean" &&
     this.role !== "Student" &&
-    this.role !== "Faculty"
+    this.role !== "Faculty" &&
+    this.role !== "HoD"
   ) {
     this.school = undefined;
   }

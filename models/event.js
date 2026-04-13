@@ -17,10 +17,12 @@ const eventSchema = new Schema(
 
     eps: {
       url: { type: String, required: true },
+      resourceType: { type: String, required: true },
       public_id: { type: String, required: true },
     },
     photo: {
       url: String,
+      resourceType: String,
       public_id: String,
     },
 

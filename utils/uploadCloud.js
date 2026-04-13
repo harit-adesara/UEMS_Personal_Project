@@ -35,6 +35,7 @@ export const uploadToCloudinary = (file, folder) => {
         if (error) return reject(error);
 
         resolve({
+          resourceType: result.resource_type,
           url: result.secure_url,
           public_id: result.public_id,
         });
