@@ -219,7 +219,7 @@ const eventListStudent = asyncHandler(async (req, res) => {
   }
 
   const { school, branch, year, division } = req.user;
-  let filter = { status: "Accepted" };
+  let filter = { status: "Approved" };
 
   if (req.query.date) {
     const start = new Date(req.query.date);
@@ -236,21 +236,41 @@ const eventListStudent = asyncHandler(async (req, res) => {
 
   filter.targets = {
     $elemMatch: {
-      school,
-      branches: {
-        $elemMatch: {
-          $and: [
-            { branch: { $in: [branch, null] } },
-            { StudentYear: { $in: [year, null] } },
-            {
-              $or: [
-                { divisions: { $size: 0 } },
-                { divisions: { $in: [division] } },
+      school: school,
+      $or: [
+        { branches: { $exists: false } },
+        { branches: { $size: 0 } },
+
+        {
+          branches: {
+            $elemMatch: {
+              $and: [
+                {
+                  $or: [
+                    { branch: branch },
+                    { branch: null },
+                    { branch: { $exists: false } },
+                  ],
+                },
+                {
+                  $or: [
+                    { StudentYear: year },
+                    { StudentYear: null },
+                    { StudentYear: { $exists: false } },
+                  ],
+                },
+                {
+                  $or: [
+                    { divisions: { $exists: false } },
+                    { divisions: { $size: 0 } },
+                    { divisions: division },
+                  ],
+                },
               ],
             },
-          ],
+          },
         },
-      },
+      ],
     },
   };
 

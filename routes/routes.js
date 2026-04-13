@@ -269,7 +269,7 @@ router.route("/attendance/qr").post(verifyJWT, markAttendanceQR);
 
 router.route("/event/register/:eventId").post(verifyJWT, registerInEvent);
 
-router.route("/events").get(verifyJWT, eventListStudent);
+router.route("/events/student").get(verifyJWT, eventListStudent);
 
 router.route("/event/:eventId").get(verifyJWT, viewEventDetail);
 

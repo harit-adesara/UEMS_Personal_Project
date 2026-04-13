@@ -75,21 +75,41 @@ const data = async (user, message) => {
     filter.status = "Approved";
     filter.targets = {
       $elemMatch: {
-        school,
-        branches: {
-          $elemMatch: {
-            $and: [
-              { branch: { $in: [branch, null] } },
-              { StudentYear: { $in: [year, null] } },
-              {
-                $or: [
-                  { divisions: { $size: 0 } },
-                  { divisions: { $in: [division] } },
+        school: school,
+        $or: [
+          { branches: { $exists: false } },
+          { branches: { $size: 0 } },
+
+          {
+            branches: {
+              $elemMatch: {
+                $and: [
+                  {
+                    $or: [
+                      { branch: user.branch },
+                      { branch: null },
+                      { branch: { $exists: false } },
+                    ],
+                  },
+                  {
+                    $or: [
+                      { StudentYear: user.year },
+                      { StudentYear: null },
+                      { StudentYear: { $exists: false } },
+                    ],
+                  },
+                  {
+                    $or: [
+                      { divisions: { $exists: false } },
+                      { divisions: { $size: 0 } },
+                      { divisions: user.division },
+                    ],
+                  },
                 ],
               },
-            ],
+            },
           },
-        },
+        ],
       },
     };
     event = await Event.find(filter)
@@ -98,7 +118,7 @@ const data = async (user, message) => {
         "name detail photo organizedBy year startTime endTime registrationDeadline venue amount",
       );
 
-    registration = await Registration.find({ student: req.user })
+    registration = await Registration.find({ student: user._id })
       .populate("event", "name")
       .populate("student", "name")
       .select("event student");
@@ -201,6 +221,8 @@ export const chatBot = asyncHandler(async (req, res) => {
 
     res.end();
   } catch (error) {
+    console.log(error);
+
     throw new ApiError(404, "Error in chatbot");
   }
 });
