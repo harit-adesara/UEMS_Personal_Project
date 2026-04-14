@@ -12,6 +12,7 @@ import { redis, storeToken, getToken } from "../db/redis.js";
 import { Attendance } from "../models/attendance.js";
 import { determineEventLevel } from "./function.js";
 import { Registration } from "../models/registration.js";
+import { generalNotification, studentNotification } from "../db/bullmq.js";
 import {
   validateSchool,
   validateBranch,
@@ -249,11 +250,22 @@ const modifyEventBeforeApproveCommon = asyncHandler(async (req, res) => {
   if (status) event.status = status;
 
   await event.save();
+  void generalNotification({
+    data: {
+      userId: req.user._id,
+      title: "Event Modified",
+      body: "Your event has been modified",
+      meta: {
+        eventId: event._id,
+      },
+    },
+    type: "ModifiedEvent",
+  });
 
   return res
     .status(200)
     .json(new ApiResponse(200, { event }, "Event modified successfully"));
-}); // complete
+}); // complete ///
 
 const modifyEventAfterApproveCommon = asyncHandler(async (req, res) => {
   if (!["Faculty", "HoD", "Dean", "Director", "Club"].includes(req.user.role)) {
@@ -314,11 +326,22 @@ const modifyEventAfterApproveCommon = asyncHandler(async (req, res) => {
   }
 
   await event.save();
+  void studentNotification({
+    data: {
+      parsedTargets: event.parsedTargets,
+      title: "Event Modified",
+      body: `${event.name} event has been modified`,
+      meta: {
+        eventId: event._id,
+      },
+    },
+    type: "ModifiedEvent",
+  });
 
   res
     .status(200)
     .json(new ApiResponse(200, { event }, "Event modified successfully"));
-}); // complete
+}); // complete ///
 
 const deleteEventCommon = asyncHandler(async (req, res) => {
   if (!["Faculty", "HoD", "Dean", "Director", "Club"].includes(req.user.role)) {
@@ -351,9 +374,17 @@ const deleteEventCommon = asyncHandler(async (req, res) => {
   await deleteFromCloudinary(event.eps.public_id, event.eps.resourceType);
 
   await event.deleteOne();
+  void generalNotification({
+    data: {
+      userId: req.user._id,
+      title: "Event Deleted",
+      body: `Your event ${event.name} has been deleted`,
+    },
+    type: "DeleteEvent",
+  });
 
   res.status(200).json(new ApiResponse(200, {}, "Event deleted successfully"));
-}); // complete
+}); // complete ///
 
 const getEventCommon = asyncHandler(async (req, res) => {
   if (!["Faculty", "HoD", "Dean", "Director", "Club"].includes(req.user.role)) {
@@ -574,6 +605,17 @@ const eventStatusApproveCommon = asyncHandler(async (req, res) => {
       timestamp: new Date(),
     });
     await event.save();
+    await generalNotification({
+      data: {
+        userId: event.organizedBy,
+        title: "Event Approved",
+        body: `Your event ${event.name} has been approved`,
+        meta: {
+          eventId: event._id,
+        },
+      },
+      type: "EventApproved",
+    });
     return res.status(200).json(200, "Event accepted");
   } catch (error) {
     throw new ApiError(404, "Error while approving event");
@@ -610,6 +652,17 @@ const eventStatusRejectCommon = asyncHandler(async (req, res) => {
       timestamp: new Date(),
     });
     await event.save();
+    await generalNotification({
+      data: {
+        userId: event.organizedBy,
+        title: "Event Approved",
+        body: `Your event ${event.name} has been approved`,
+        meta: {
+          eventId: event._id,
+        },
+      },
+      type: "EventRejected",
+    });
     return res.status(200).json(200, "Event rejected");
   } catch (error) {
     throw new ApiError(404, "Error while rejecting event");

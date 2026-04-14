@@ -4,6 +4,7 @@ import { asyncHandler } from "../utils/asyncHandler.js";
 import { Registration } from "../models/registration.js";
 import { Attendance } from "../models/attendance.js";
 import mongoose from "mongoose";
+import { generalNotification, studentNotification } from "../db/bullmq.js";
 
 export const verifyPayment = asyncHandler(async (req, res) => {
   const { razorpayOrderId, razorpayPaymentId, signature, eventId } = req.body;
@@ -96,6 +97,17 @@ export const verifyPayment = asyncHandler(async (req, res) => {
       }
 
       await session.commitTransaction();
+      void generalNotification({
+        data: {
+          userId: req.user._id,
+          title: "Register in Event",
+          body: `You have register in event ${event.name}`,
+          meta: {
+            eventId: event._id,
+          },
+        },
+        type: "RegisterInEvent",
+      });
       res.status(200).json(new ApiResponse(200, "Payment verified"));
     } else {
       throw new ApiError(404, "Invalid signature");
@@ -106,4 +118,4 @@ export const verifyPayment = asyncHandler(async (req, res) => {
   } finally {
     session.endSession();
   }
-}); // complete
+}); // complete ///

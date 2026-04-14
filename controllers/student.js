@@ -12,6 +12,7 @@ import { redis, storeToken, getToken } from "../db/redis.js";
 import { Attendance } from "../models/attendance.js";
 import { Registration } from "../models/registration.js";
 import mongoose from "mongoose";
+import { generalNotification, studentNotification } from "../db/bullmq.js";
 
 const addFeedback = asyncHandler(async (req, res) => {
   if (req.user.role !== "Student") {
@@ -177,6 +178,17 @@ const registerInEvent = asyncHandler(async (req, res) => {
     }
 
     await session.commitTransaction();
+    void generalNotification({
+      data: {
+        userId: req.user._id,
+        title: "Register in Event",
+        body: `You have register in event ${event.name}`,
+        meta: {
+          eventId: event._id,
+        },
+      },
+      type: "RegisterInEvent",
+    });
 
     if (event.amount === 0) {
       return res
@@ -211,7 +223,7 @@ const registerInEvent = asyncHandler(async (req, res) => {
   } finally {
     session.endSession();
   }
-}); //complete
+}); //complete ///
 
 const eventListStudent = asyncHandler(async (req, res) => {
   if (req.user.role !== "Student") {

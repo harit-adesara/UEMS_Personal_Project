@@ -287,4 +287,13 @@ router.route("/payment/verify").post(verifyJWT, verifyPayment);
 
 router.route("/chat").post(verifyJWT, chatBot);
 
+import {
+  saveFCMToken,
+  toggleNotification,
+} from "../controllers/notification_controller.js";
+
+router.post("/fcm-token", verifyJWT, saveFCMToken);
+
+router.patch("/toggle", verifyJWT, toggleNotification);
+
 export { router };

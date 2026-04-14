@@ -10,6 +10,7 @@ import { registerEmail, sendEmail } from "../utils/mail.js";
 import { uploadToCloudinary } from "../utils/uploadCloud.js";
 import cloudinary from "../db/cloudinary.js";
 import mongoose from "mongoose";
+import { generalNotification, studentNotification } from "../db/bullmq.js";
 
 const validateSchool = async (school) => {
   if (!school) return null;
@@ -249,7 +250,7 @@ const getEvent = asyncHandler(async (req, res) => {
   } catch (error) {
     throw new ApiError(404, "Event not found");
   }
-}); // complete //
+}); // complete
 
 const getUser = asyncHandler(async (req, res) => {
   try {
@@ -292,11 +293,22 @@ const eventStatusApprove = asyncHandler(async (req, res) => {
       timestamp: new Date(),
     });
     await event.save();
+    void generalNotification({
+      data: {
+        userId: event.organizedBy,
+        title: "Event approved",
+        body: "You event has been approved by admin",
+        meta: {
+          eventId: eventId,
+        },
+      },
+      type: "EventApproved",
+    });
     return res.status(200).json(200, "Event accepted");
   } catch (error) {
     throw new ApiError(404, "Error while approving event");
   }
-}); // complete
+}); // complete ///
 
 const eventStatusReject = asyncHandler(async (req, res) => {
   try {
@@ -321,11 +333,22 @@ const eventStatusReject = asyncHandler(async (req, res) => {
       timestamp: new Date(),
     });
     await event.save();
+    void generalNotification({
+      data: {
+        userId: event.organizedBy,
+        title: "Event rejected",
+        body: "You event has been rejected by admin",
+        meta: {
+          eventId: eventId,
+        },
+      },
+      type: "EventRejected",
+    });
     return res.status(200).json(200, "Event rejected");
   } catch (error) {
     throw new ApiError(404, "Error while rejecting event");
   }
-}); // complete
+}); // complete ///
 
 const modifyUser = asyncHandler(async (req, res) => {
   if (req.user.role !== "Admin") {
@@ -423,9 +446,20 @@ const modifyUser = asyncHandler(async (req, res) => {
   }
 
   await user.save();
+  void generalNotification({
+    data: {
+      userId: userId,
+      title: "Your Profile Updated",
+      body: "Your profile has been updated by admin",
+      meta: {
+        userId: userId,
+      },
+    },
+    type: "ProfileModified",
+  });
 
   res.status(200).json(new ApiResponse(200, user, "User updated successfully"));
-}); // complete
+}); // complete ///
 
 const deleteUser = asyncHandler(async (req, res) => {
   const { userId } = req.params;
@@ -445,9 +479,20 @@ const deleteUser = asyncHandler(async (req, res) => {
   user.refreshToken = undefined;
 
   await user.save();
+  void generalNotification({
+    data: {
+      userId: userId,
+      title: "You have been removed",
+      body: "Your profile has been removed from UEMS",
+      meta: {
+        userId: userId,
+      },
+    },
+    type: "ProfileDeleted",
+  });
 
   res.status(200).json(new ApiResponse(200, {}, "User deleted successfully"));
-}); // complete
+}); // complete ///
 
 const deleteFromCloudinary = async (public_id, type) => {
   if (!public_id) return;
@@ -687,11 +732,22 @@ const modifyEvent = asyncHandler(async (req, res) => {
   if (status) event.status = status;
 
   await event.save();
+  void generalNotification({
+    data: {
+      userId: event.organizedBy,
+      title: "Your event modified",
+      body: "Your event has been modified by admin",
+      meta: {
+        eventId: event._id,
+      },
+    },
+    type: "ModifiedEvent",
+  });
 
   return res
     .status(200)
     .json(new ApiResponse(200, event, "Event updated successfully"));
-}); // complete //
+}); // complete ///
 
 const createBranch = asyncHandler(async (req, res) => {
   try {
@@ -1302,10 +1358,24 @@ const createEventFaculty = asyncHandler(async (req, res) => {
     year,
   });
 
+  if (status === "Approved") {
+    void studentNotification({
+      data: {
+        parsedTargets: parsedTargets,
+        title: "New Event",
+        body: `${event.name} event has been created`,
+        meta: {
+          eventId: event._id,
+        },
+      },
+      type: "createEvent",
+    });
+  }
+
   res
     .status(201)
-    .json(new ApiResponse(201, event, "Event created successfully"));
-}); // complete //
+    .json(new ApiResponse(201, { event }, "Event created successfully"));
+}); // complete ///
 
 // HoD
 
@@ -1445,10 +1515,24 @@ const createEventHoD = asyncHandler(async (req, res) => {
     year,
   });
 
+  if (status === "Approved") {
+    void studentNotification({
+      data: {
+        parsedTargets: parsedTargets,
+        title: "New Event",
+        body: `${event.name} event has been created`,
+        meta: {
+          eventId: event._id,
+        },
+      },
+      type: "createEvent",
+    });
+  }
+
   res
     .status(201)
     .json(new ApiResponse(201, event, "Event created successfully"));
-}); // complete //
+}); // complete ///
 
 // Dean
 
@@ -1583,10 +1667,24 @@ const createEventDean = asyncHandler(async (req, res) => {
     year,
   });
 
+  if (status === "Approved") {
+    void studentNotification({
+      data: {
+        parsedTargets: parsedTargets,
+        title: "New Event",
+        body: `${event.name} event has been created`,
+        meta: {
+          eventId: event._id,
+        },
+      },
+      type: "createEvent",
+    });
+  }
+
   res
     .status(201)
     .json(new ApiResponse(201, event, "Event created successfully"));
-}); // complete //
+}); // complete ///
 
 // Director
 
@@ -1712,10 +1810,22 @@ const createEventDirector = asyncHandler(async (req, res) => {
     year,
   });
 
+  void studentNotification({
+    data: {
+      parsedTargets: parsedTargets,
+      title: "New Event",
+      body: `${event.name} event has been created`,
+      meta: {
+        eventId: event._id,
+      },
+    },
+    type: "createEvent",
+  });
+
   res
     .status(201)
     .json(new ApiResponse(201, event, "Event created successfully"));
-}); // complete //
+}); // complete ///
 
 // Club
 
@@ -1845,10 +1955,24 @@ const createEventClub = asyncHandler(async (req, res) => {
     year,
   });
 
+  if (status === "Approved") {
+    void studentNotification({
+      data: {
+        parsedTargets: parsedTargets,
+        title: "New Event",
+        body: `${event.name} event has been created`,
+        meta: {
+          eventId: event._id,
+        },
+      },
+      type: "createEvent",
+    });
+  }
+
   res
     .status(201)
     .json(new ApiResponse(201, event, "Event created successfully"));
-}); // complete //
+}); // complete ///
 
 export {
   getDivisionCount,

@@ -108,6 +108,8 @@ const userSchema = new Schema(
         );
       },
     },
+    fcmToken: String,
+    notificationEnabled: { type: Boolean, default: false },
   },
   {
     timestamps: true,
