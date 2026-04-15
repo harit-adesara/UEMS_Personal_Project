@@ -129,22 +129,13 @@ const modifyEventBeforeApproveCommon = asyncHandler(async (req, res) => {
 
     ({ level, status } = await determineEventLevel(parsedTargets));
 
-    if (req.user.role === "Faculty") {
-      if (level === "Division") {
-        const target = parsedTargets[0];
-        const branchId = target.branches[0].branch.toString();
-        const schoolId = target.school.toString();
-
-        const isOwnScope =
-          branchId === req.user.branch.toString() &&
-          schoolId === req.user.school.toString();
-
-        status = isOwnScope ? "Approved" : "Pending";
-      } else {
-        status = "Pending";
+    if (level === "Division") {
+      if (req.user.role === "Club") {
+        throw new ApiError(403, "Club cannot create division level event");
       }
+      status = "Approved";
     } else if (req.user.role === "HoD") {
-      if (["Division", "Branch"].includes(level)) {
+      if (level === "Branch") {
         const target = parsedTargets[0];
         const branch = target.branches[0].branch.toString();
         const school = target.school.toString();
@@ -158,20 +149,17 @@ const modifyEventBeforeApproveCommon = asyncHandler(async (req, res) => {
         status = "Pending";
       }
     } else if (req.user.role === "Dean") {
-      if (["Division", "Branch", "School"].includes(level)) {
+      if (["Branch", "School"].includes(level)) {
         const target = parsedTargets[0];
         const school = target.school.toString();
-        const isOwn = school === req.user.school;
+
+        const isOwn = school === req.user.school.toString();
         status = isOwn ? "Approved" : "Pending";
       } else {
         status = "Pending";
       }
     } else if (req.user.role === "Club") {
-      if (level === "Division") {
-        throw new ApiError(404, "Club can not create division level event");
-      } else {
-        status = "Pending";
-      }
+      status = "Pending";
     } else if (req.user.role === "Director") {
       status = "Approved";
     }
@@ -265,7 +253,7 @@ const modifyEventBeforeApproveCommon = asyncHandler(async (req, res) => {
   return res
     .status(200)
     .json(new ApiResponse(200, { event }, "Event modified successfully"));
-}); // complete ///
+}); // complete /// done
 
 const modifyEventAfterApproveCommon = asyncHandler(async (req, res) => {
   if (!["Faculty", "HoD", "Dean", "Director", "Club"].includes(req.user.role)) {
@@ -516,7 +504,10 @@ const getEventApprovalOrReject = asyncHandler(async (req, res) => {
     throw new ApiError(403, "Unauthorized user");
   }
 
-  let filter = {};
+  let filter = {
+    status: "Pending",
+  };
+
   if (req.user.role === "HoD") {
     filter.level = "Branch";
     filter.targets = {
@@ -572,7 +563,7 @@ const getEventApprovalOrReject = asyncHandler(async (req, res) => {
   return res
     .status(200)
     .json(new ApiResponse(200, { events }, "Event fetched successfully"));
-}); // complete
+}); // complete done
 
 const eventStatusApproveCommon = asyncHandler(async (req, res) => {
   try {
