@@ -117,6 +117,7 @@ router.route("/event/modify-before-approve/:eventId").post(
     { name: "photo", maxCount: 1 },
     { name: "epsFile", maxCount: 1 },
   ]),
+  verifyJWT,
   modifyEventBeforeApproveValidator(),
   modifyEventBeforeApproveCommon,
 );
@@ -223,37 +224,37 @@ router.route("/event/dean/create").post(
 // User
 router.route("/user/create").post(verifyJWT, createUserValidator(), createUser);
 
-router.route("/user/modify").put(modifyUserValidator(), modifyUser);
+router.route("/user/modify").put(verifyJWT, modifyUserValidator(), modifyUser);
 
-router.route("/user/delete/:userId").delete(deleteUser);
+router.route("/user/delete/:userId").delete(verifyJWT, deleteUser);
 
-router.route("/user/get").post(getUser);
+router.route("/user/get").post(verifyJWT, getUser);
 
-router.route("/event").get(getEvent);
+router.route("/event").get(verifyJWT, getEvent);
 
-router.route("/event/approve/:eventId").put(eventStatusApprove);
+router.route("/event/approve/:eventId").put(verifyJWT, eventStatusApprove);
 
-router.put("/event/reject/:eventId", eventStatusReject);
+router.route("/event/reject/:eventId").put(verifyJWT, eventStatusReject);
 
-router.put("/event/modify", modifyEventValidator, modifyEvent);
+router.route("/event/modify").put(verifyJWT, modifyEventValidator, modifyEvent);
 
-router.route("/branch/create").post(createBranch);
+router.route("/branch/create").post(verifyJWT, createBranch);
 
-router.route("/branch/modify").put(modifyBranch);
+router.route("/branch/modify").put(verifyJWT, modifyBranch);
 
-router.route("/branch/delete/:branchId").delete(deleteBranch);
+router.route("/branch/delete/:branchId").delete(verifyJWT, deleteBranch);
 
-router.route("/school/create").post(createSchool);
+router.route("/school/create").post(verifyJWT, createSchool);
 
-router.route("/school/modify").put(modifySchool);
+router.route("/school/modify").put(verifyJWT, modifySchool);
 
-router.route("/school/delete/:schoolId").delete(deleteSchool);
+router.route("/school/delete/:schoolId").delete(verifyJWT, deleteSchool);
 
-router.route("/division/create").post(createDivision);
+router.route("/division/create").post(verifyJWT, createDivision);
 
-router.route("/division/modify").put(modifyDivision);
+router.route("/division/modify").put(verifyJWT, modifyDivision);
 
-router.route("/division/delete/:divisionId").delete(deleteDivision);
+router.route("/division/delete/:divisionId").delete(verifyJWT, deleteDivision);
 
 import {
   addFeedback,
