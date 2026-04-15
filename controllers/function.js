@@ -1773,6 +1773,8 @@ const createEventDirector = asyncHandler(async (req, res) => {
     throw new ApiError(400, `Event "${name}" already exists for year ${year}`);
   }
 
+  let { level, status } = await determineEventLevel(parsedTargets);
+
   const uploadedEps = await uploadToCloudinary(epsFile, "events/eps");
 
   let uploadedPhoto = null;
