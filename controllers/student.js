@@ -13,7 +13,6 @@ import { Attendance } from "../models/attendance.js";
 import { Registration } from "../models/registration.js";
 import mongoose from "mongoose";
 import { generalNotification, studentNotification } from "../db/bullmq.js";
-import { getToken } from "../db/redis.js";
 
 const addFeedback = asyncHandler(async (req, res) => {
   if (req.user.role !== "Student") {
