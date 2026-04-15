@@ -93,12 +93,15 @@ const addFeedback = asyncHandler(async (req, res) => {
 
 const markAttendanceQR = asyncHandler(async (req, res) => {
   const { eventId, token } = req.body;
+
+  if (!eventId || !token) {
+    throw new ApiError(404, "Event ID or Token not found");
+  }
+
   const userId = req.user._id;
 
-  const stored = await getToken(eventId);
-
-  if (!stored || stored !== token) {
-    throw new ApiError(400, "Invalid or expired QR");
+  if (!userId) {
+    throw new ApiError(404, "User ID not found");
   }
 
   const attendanceDoc = await Attendance.findOne({ event: eventId });
@@ -113,6 +116,12 @@ const markAttendanceQR = asyncHandler(async (req, res) => {
 
   if (record.status === "Present") {
     return res.status(400).json({ message: "Attendance already marked" });
+  }
+
+  const stored = await getToken(eventId);
+
+  if (!stored || stored !== token) {
+    throw new ApiError(400, "Invalid or expired QR");
   }
 
   record.status = "Present";
