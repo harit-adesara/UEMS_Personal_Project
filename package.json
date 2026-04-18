@@ -28,6 +28,7 @@
     "mailgen": "^2.0.32",
     "mongoose": "^9.3.3",
     "multer": "^2.1.1",
+    "node-cron": "^4.2.1",
     "nodemailer": "^8.0.4",
     "nodemon": "^3.1.14",
     "razorpay": "^2.9.6"

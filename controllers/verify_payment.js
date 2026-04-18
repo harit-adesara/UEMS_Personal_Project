@@ -5,6 +5,7 @@ import { Registration } from "../models/registration.js";
 import { Attendance } from "../models/attendance.js";
 import mongoose from "mongoose";
 import { generalNotification, studentNotification } from "../db/bullmq.js";
+import crypto from "crypto";
 
 export const verifyPayment = asyncHandler(async (req, res) => {
   const { razorpayOrderId, razorpayPaymentId, signature, eventId } = req.body;
@@ -37,85 +38,92 @@ export const verifyPayment = asyncHandler(async (req, res) => {
     const secret = process.env.RAZORPAY_KEY_SECRET;
     const hmac = crypto.createHmac("sha256", secret);
     hmac.update(razorpayOrderId + "|" + razorpayPaymentId);
+
     const generatedSignature = hmac.digest("hex");
-    if (generatedSignature === signature) {
-      const update = await Registration.findOneAndUpdate(
-        {
-          student: req.user._id,
-          event: eventId,
-          razorpayOrderId: razorpayOrderId,
-        },
-        {
-          paid: true,
-          razorpayPaymentId: razorpayPaymentId,
-          paidAt: new Date(),
-        },
-        { new: true, session },
-      );
 
-      let attendanceDoc = await Attendance.findOne({ event: eventId }).session(
-        session,
-      );
-
-      if (!attendanceDoc) {
-        [attendanceDoc] = await Attendance.create(
-          [
-            {
-              event: eventId,
-              records: [
-                {
-                  student: req.user.id,
-                  school: req.user.school,
-                  branch: req.user.branch,
-                  division: req.user.division || null,
-                  status: "Absent",
-                },
-              ],
-            },
-          ],
-          { session },
-        );
-      } else {
-        const exists = attendanceDoc.records.some(
-          (r) => r.student.toString() === req.user.id.toString(),
-        );
-        if (!exists) {
-          attendanceDoc.records.push({
-            student: req.user.id,
-            school: req.user.school,
-            branch: req.user.branch,
-            division: req.user.division || null,
-            status: "Absent",
-          });
-
-          await attendanceDoc.save({ session });
-        }
-      }
-
-      if (!update) {
-        throw new ApiError(404, "Registration not found");
-      }
-
-      await session.commitTransaction();
-      void generalNotification({
-        data: {
-          userId: req.user._id,
-          title: "Register in Event",
-          body: `You have register in event ${event.name}`,
-          meta: {
-            eventId: event._id,
-          },
-        },
-        type: "RegisterInEvent",
-      });
-      res.status(200).json(new ApiResponse(200, "Payment verified"));
-    } else {
-      throw new ApiError(404, "Invalid signature");
+    if (generatedSignature !== signature) {
+      throw new ApiError(400, "Invalid signature");
     }
+
+    const update = await Registration.findOneAndUpdate(
+      {
+        student: req.user._id,
+        event: eventId,
+        razorpayOrderId: razorpayOrderId,
+      },
+      {
+        paid: true,
+        status: "confirmed",
+        razorpayPaymentId: razorpayPaymentId,
+        paidAt: new Date(),
+        expiresAt: null,
+      },
+      { new: true, session },
+    );
+
+    if (!update) {
+      throw new ApiError(404, "Registration not found");
+    }
+
+    let attendanceDoc = await Attendance.findOne({ event: eventId }).session(
+      session,
+    );
+
+    if (!attendanceDoc) {
+      [attendanceDoc] = await Attendance.create(
+        [
+          {
+            event: eventId,
+            records: [
+              {
+                student: req.user._id,
+                school: req.user.school,
+                branch: req.user.branch,
+                division: req.user.division || null,
+                status: "Absent",
+              },
+            ],
+          },
+        ],
+        { session },
+      );
+    } else {
+      const exists = attendanceDoc.records.some(
+        (r) => r.student.toString() === req.user._id.toString(),
+      );
+
+      if (!exists) {
+        attendanceDoc.records.push({
+          student: req.user._id,
+          school: req.user.school,
+          branch: req.user.branch,
+          division: req.user.division || null,
+          status: "Absent",
+        });
+
+        await attendanceDoc.save({ session });
+      }
+    }
+
+    await session.commitTransaction();
+
+    void generalNotification({
+      data: {
+        userId: req.user._id,
+        title: "Register in Event",
+        body: `You have registered in event ${eventId}`,
+        meta: {
+          eventId: eventId,
+        },
+      },
+      type: "RegisterInEvent",
+    });
+
+    return res.status(200).json(new ApiResponse(200, "Payment verified"));
   } catch (error) {
     await session.abortTransaction();
-    throw new ApiError(404, "Error in verifing payment");
+    throw new ApiError(400, error.message || "Error in verifying payment");
   } finally {
     session.endSession();
   }
-}); // complete ///
+});

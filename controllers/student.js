@@ -136,38 +136,44 @@ const registerInEvent = asyncHandler(async (req, res) => {
 
   const { eventId } = req.params;
 
-  const event = await Event.findById(eventId);
-  if (!event) throw new ApiError(404, "Event not found");
-  if (event.status !== "Accepted") {
-    throw new ApiError(404, "Event is not accepted yet");
-  }
-
-  if (event.capacity !== null) {
-    const registration = await Registration.countDocuments({
-      event: eventId,
-      paid: true,
-    });
-
-    if (registration >= event.capacity) {
-      throw new ApiError(400, "Registration is full");
-    }
-  }
-
-  let order = null;
-  if (event.amount > 0) {
-    order = await razorpay.orders.create({
-      amount: event.amount * 100,
-      currency: "INR",
-      receipt: `rec_${req.user._id.toString().slice(-8)}_${eventId
-        .toString()
-        .slice(-8)}`,
-    });
-  }
-
   const session = await mongoose.startSession();
   session.startTransaction();
 
   try {
+    const event = await Event.findById(eventId).session(session);
+    if (!event) throw new ApiError(404, "Event not found");
+
+    if (event.status !== "Accepted") {
+      throw new ApiError(404, "Event is not accepted yet");
+    }
+
+    if (event.capacity !== null) {
+      const registrationCount = await Registration.countDocuments(
+        {
+          event: eventId,
+          status: { $in: ["reserved", "confirmed"] },
+          expiresAt: { $gt: new Date() },
+        },
+        { session },
+      );
+
+      if (registrationCount >= event.capacity) {
+        throw new ApiError(400, "Registration is full");
+      }
+    }
+
+    let order = null;
+
+    if (event.amount > 0) {
+      order = await razorpay.orders.create({
+        amount: event.amount * 100,
+        currency: "INR",
+        receipt: `rec_${req.user._id.toString().slice(-8)}_${eventId
+          .toString()
+          .slice(-8)}`,
+      });
+    }
+
     const [registration] = await Registration.create(
       [
         {
@@ -176,9 +182,16 @@ const registerInEvent = asyncHandler(async (req, res) => {
           school: req.user.school,
           branch: req.user.branch,
           division: req.user.division,
+
+          status: event.amount === 0 ? "confirmed" : "reserved",
           paid: event.amount === 0,
+
           razorpayOrderId: order ? order.id : null,
+
           registeredAt: new Date(),
+
+          expiresAt:
+            event.amount > 0 ? new Date(Date.now() + 15 * 60 * 1000) : null,
         },
       ],
       { session },
@@ -204,39 +217,35 @@ const registerInEvent = asyncHandler(async (req, res) => {
     }
 
     await session.commitTransaction();
-    void generalNotification({
-      data: {
-        userId: req.user._id,
-        title: "Register in Event",
-        body: `You have register in event ${event.name}`,
-        meta: {
-          eventId: event._id,
-        },
-      },
-      type: "RegisterInEvent",
-    });
 
     if (event.amount === 0) {
-      return res
-        .status(200)
-        .json(
-          new ApiResponse(
-            200,
-            { isPaid: false, registration },
-            "Registration done",
-          ),
-        );
+      void generalNotification({
+        data: {
+          userId: req.user._id,
+          title: "Register in Event",
+          body: `You have registered in event ${event.name}`,
+          meta: { eventId: event._id },
+        },
+        type: "RegisterInEvent",
+      });
     }
 
     return res.status(200).json(
-      new ApiResponse(200, {
-        isPaid: true,
-        order: {
-          razorpayOrderId: order.id,
-          amount: order.amount,
-          currency: order.currency,
+      new ApiResponse(
+        200,
+        {
+          isPaid: event.amount === 0 ? false : true,
+          registration,
+          ...(order && {
+            order: {
+              razorpayOrderId: order.id,
+              amount: order.amount,
+              currency: order.currency,
+            },
+          }),
         },
-      }),
+        "Registration done",
+      ),
     );
   } catch (error) {
     await session.abortTransaction();
@@ -245,7 +254,7 @@ const registerInEvent = asyncHandler(async (req, res) => {
       throw new ApiError(400, "User already registered");
     }
 
-    throw error;
+    throw new ApiError(404, "Error in registering event");
   } finally {
     session.endSession();
   }

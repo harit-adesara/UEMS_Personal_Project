@@ -6,11 +6,13 @@ dotenv.config({
 const port = process.env.port || 4000;
 import { app } from "./app.js";
 import { connectDb } from "./db/index.js";
+import { startExpireRegistrationsJob } from "./utils/cron.js";
 
 connectDb()
   .then(() => {
     app.listen(port, () => {
       console.log(`app is litening on http://localhost:${port}`);
+      startExpireRegistrationsJob();
     });
   })
   .catch(() => {

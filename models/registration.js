@@ -35,6 +35,13 @@ const registrationSchema = new Schema(
       required: true,
     },
 
+    status: {
+      type: String,
+      enum: ["reserved", "confirmed", "expired"],
+      default: "reserved",
+      index: true,
+    },
+
     paid: {
       type: Boolean,
       default: false,
@@ -66,10 +73,18 @@ const registrationSchema = new Schema(
       type: Date,
       default: Date.now,
     },
+
+    expiresAt: {
+      type: Date,
+      default: function () {
+        return this.paid ? null : new Date(Date.now() + 15 * 60 * 1000);
+      },
+    },
   },
   { timestamps: true },
 );
 
 registrationSchema.index({ event: 1, student: 1 }, { unique: true });
+registrationSchema.index({ expiresAt: 1 });
 
 export const Registration = mongoose.model("Registration", registrationSchema);
