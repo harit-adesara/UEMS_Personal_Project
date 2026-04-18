@@ -99,6 +99,12 @@ const eventSchema = new Schema(
       trim: true,
     },
 
+    capacity: {
+      type: Number,
+      default: null,
+      min: 1,
+    },
+
     status: {
       type: String,
       enum: ["Pending", "Approved", "Rejected"],

@@ -176,6 +176,7 @@ const modifyEventBeforeApproveCommon = asyncHandler(async (req, res) => {
     "registrationDeadline",
     "venue",
     "amount",
+    "capacity",
   ];
 
   for (const key of Object.keys(updates)) {
@@ -200,6 +201,34 @@ const modifyEventBeforeApproveCommon = asyncHandler(async (req, res) => {
 
   if (registrationDeadline && startTime && registrationDeadline > startTime) {
     throw new ApiError(400, "Registration deadline must be before start time");
+  }
+
+  if (updates.capacity !== undefined) {
+    if (updates.capacity === null) {
+      updates.capacity = null;
+    } else {
+      if (typeof updates.capacity !== "number") {
+        throw new ApiError(400, "Capacity must be a number");
+      }
+
+      const cap = Number(updates.capacity);
+
+      if (cap < 0) {
+        throw new ApiError(400, "Capacity should be greater than 0");
+      }
+
+      const old = event.capacity;
+
+      if (old === null) {
+        throw new ApiError(404, "Capacity can not be modify for this event");
+      }
+
+      const oldCap = Number(old);
+
+      if (oldCap !== null && cap < oldCap) {
+        throw new ApiError(400, "Capacity cannot be decreased");
+      }
+    }
   }
 
   for (const key of allowedFields) {
@@ -283,6 +312,7 @@ const modifyEventAfterApproveCommon = asyncHandler(async (req, res) => {
     "endTime",
     "registrationDeadline",
     "venue",
+    "capacity",
   ];
 
   for (const key of Object.keys(updates)) {
@@ -307,6 +337,34 @@ const modifyEventAfterApproveCommon = asyncHandler(async (req, res) => {
 
   if (registrationDeadline && startTime && registrationDeadline > startTime) {
     throw new ApiError(400, "Registration deadline must be before start time");
+  }
+
+  if (updates.capacity !== undefined) {
+    if (updates.capacity === null) {
+      updates.capacity = null;
+    } else {
+      if (typeof updates.capacity !== "number") {
+        throw new ApiError(400, "Capacity must be a number");
+      }
+
+      const cap = Number(updates.capacity);
+
+      if (cap < 0) {
+        throw new ApiError(400, "Capacity should be greater than 0");
+      }
+
+      const old = event.capacity;
+
+      if (old === null) {
+        throw new ApiError(404, "Capacity can not be modify for this event");
+      }
+
+      const oldCap = Number(old);
+
+      if (oldCap !== null && cap < oldCap) {
+        throw new ApiError(400, "Capacity cannot be decreased");
+      }
+    }
   }
 
   for (const key of Object.keys(updates)) {

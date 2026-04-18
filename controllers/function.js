@@ -11,6 +11,7 @@ import { uploadToCloudinary } from "../utils/uploadCloud.js";
 import cloudinary from "../db/cloudinary.js";
 import mongoose from "mongoose";
 import { generalNotification, studentNotification } from "../db/bullmq.js";
+import { redis } from "../db/redis.js";
 
 const validateSchool = async (school) => {
   if (!school) return null;
@@ -530,6 +531,7 @@ const modifyEvent = asyncHandler(async (req, res) => {
     "registrationDeadline",
     "venue",
     "amount",
+    "capacity",
   ];
 
   for (const key of Object.keys(updates)) {
@@ -683,6 +685,34 @@ const modifyEvent = asyncHandler(async (req, res) => {
 
   if (updates.amount !== undefined && updates.amount < 0) {
     throw new ApiError(400, "Amount cannot be negative");
+  }
+
+  if (updates.capacity !== undefined) {
+    if (updates.capacity === null) {
+      updates.capacity = null;
+    } else {
+      if (typeof updates.capacity !== "number") {
+        throw new ApiError(400, "Capacity must be a number");
+      }
+
+      const cap = Number(updates.capacity);
+
+      if (cap < 0) {
+        throw new ApiError(400, "Capacity should be greater than 0");
+      }
+
+      const old = event.capacity;
+
+      if (old === null) {
+        throw new ApiError(404, "Capacity can not be modify for this event");
+      }
+
+      const oldCap = Number(old);
+
+      if (oldCap !== null && cap < oldCap) {
+        throw new ApiError(400, "Capacity cannot be decreased");
+      }
+    }
   }
 
   allowedFields.forEach((key) => {
@@ -1229,6 +1259,7 @@ const createEventFaculty = asyncHandler(async (req, res) => {
     venue,
     amount,
     targets,
+    capacity,
   } = req.body;
   const epsFile = req.files?.epsFile[0];
   const photo = req.files?.photo[0];
@@ -1245,6 +1276,16 @@ const createEventFaculty = asyncHandler(async (req, res) => {
     new Date(registrationDeadline) > new Date(startTime)
   ) {
     throw new ApiError(400, "Registration deadline must be before start time");
+  }
+
+  if (capacity != undefined) {
+    if (typeof capacity !== "number") {
+      throw new ApiError(400, "Capacity must be a number");
+    }
+
+    if (capacity < 0) {
+      throw new ApiError(400, "Capacity should be greater than 0");
+    }
   }
 
   const parsedTargets = JSON.parse(targets);
@@ -1333,6 +1374,7 @@ const createEventFaculty = asyncHandler(async (req, res) => {
     endTime,
     registrationDeadline,
     venue,
+    capacity: capacity !== undefined ? capacity : null,
     amount: amount || 0,
     status,
     level,
@@ -1374,6 +1416,7 @@ const createEventHoD = asyncHandler(async (req, res) => {
     venue,
     amount,
     targets,
+    capacity,
   } = req.body;
 
   const epsFile = req.files?.epsFile[0];
@@ -1392,6 +1435,16 @@ const createEventHoD = asyncHandler(async (req, res) => {
     new Date(registrationDeadline) > new Date(startTime)
   ) {
     throw new ApiError(400, "Registration deadline must be before start time");
+  }
+
+  if (capacity != undefined) {
+    if (typeof capacity !== "number") {
+      throw new ApiError(400, "Capacity must be a number");
+    }
+
+    if (capacity < 0) {
+      throw new ApiError(400, "Capacity should be greater than 0");
+    }
   }
 
   const parsedTargets = JSON.parse(targets);
@@ -1492,6 +1545,7 @@ const createEventHoD = asyncHandler(async (req, res) => {
     targets: parsedTargets,
     startTime,
     endTime,
+    capacity: capacity !== undefined ? capacity : null,
     registrationDeadline,
     venue,
     amount: amount || 0,
@@ -1535,6 +1589,7 @@ const createEventDean = asyncHandler(async (req, res) => {
     venue,
     amount,
     targets,
+    capacity,
   } = req.body;
 
   const epsFile = req.files?.epsFile[0];
@@ -1553,6 +1608,16 @@ const createEventDean = asyncHandler(async (req, res) => {
     new Date(registrationDeadline) > new Date(startTime)
   ) {
     throw new ApiError(400, "Registration deadline must be before start time");
+  }
+
+  if (capacity != undefined) {
+    if (typeof capacity !== "number") {
+      throw new ApiError(400, "Capacity must be a number");
+    }
+
+    if (capacity < 0) {
+      throw new ApiError(400, "Capacity should be greater than 0");
+    }
   }
 
   const parsedTargets = JSON.parse(targets);
@@ -1648,6 +1713,7 @@ const createEventDean = asyncHandler(async (req, res) => {
     targets: parsedTargets,
     startTime,
     endTime,
+    capacity: capacity !== undefined ? capacity : null,
     registrationDeadline,
     venue,
     amount: amount || 0,
@@ -1691,6 +1757,7 @@ const createEventDirector = asyncHandler(async (req, res) => {
     venue,
     amount,
     targets,
+    capacity,
   } = req.body;
 
   const epsFile = req.files?.epsFile[0];
@@ -1709,6 +1776,16 @@ const createEventDirector = asyncHandler(async (req, res) => {
     new Date(registrationDeadline) > new Date(startTime)
   ) {
     throw new ApiError(400, "Registration deadline must be before start time");
+  }
+
+  if (capacity != undefined) {
+    if (typeof capacity !== "number") {
+      throw new ApiError(400, "Capacity must be a number");
+    }
+
+    if (capacity < 0) {
+      throw new ApiError(400, "Capacity should be greater than 0");
+    }
   }
 
   const parsedTargets = JSON.parse(targets);
@@ -1791,6 +1868,7 @@ const createEventDirector = asyncHandler(async (req, res) => {
     targets: parsedTargets,
     startTime,
     endTime,
+    capacity: capacity !== undefined ? capacity : null,
     registrationDeadline,
     venue,
     amount: amount || 0,
@@ -1832,6 +1910,7 @@ const createEventClub = asyncHandler(async (req, res) => {
     venue,
     amount,
     targets,
+    capacity,
   } = req.body;
 
   const epsFile = req.files?.epsFile[0];
@@ -1850,6 +1929,16 @@ const createEventClub = asyncHandler(async (req, res) => {
     new Date(registrationDeadline) > new Date(startTime)
   ) {
     throw new ApiError(400, "Registration deadline must be before start time");
+  }
+
+  if (capacity != undefined) {
+    if (typeof capacity !== "number") {
+      throw new ApiError(400, "Capacity must be a number");
+    }
+
+    if (capacity < 0) {
+      throw new ApiError(400, "Capacity should be greater than 0");
+    }
   }
 
   const parsedTargets = JSON.parse(targets);
@@ -1935,6 +2024,7 @@ const createEventClub = asyncHandler(async (req, res) => {
     organizedBy: req.user._id,
     targets: parsedTargets,
     startTime,
+    capacity: capacity !== undefined ? capacity : null,
     endTime,
     registrationDeadline,
     venue,

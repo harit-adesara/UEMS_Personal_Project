@@ -142,6 +142,17 @@ const registerInEvent = asyncHandler(async (req, res) => {
     throw new ApiError(404, "Event is not accepted yet");
   }
 
+  if (event.capacity !== null) {
+    const registration = await Registration.countDocuments({
+      event: eventId,
+      paid: true,
+    });
+
+    if (registration >= event.capacity) {
+      throw new ApiError(400, "Registration is full");
+    }
+  }
+
   let order = null;
   if (event.amount > 0) {
     order = await razorpay.orders.create({
