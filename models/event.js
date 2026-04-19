@@ -105,6 +105,11 @@ const eventSchema = new Schema(
       min: 1,
     },
 
+    seatTaken: {
+      type: Number,
+      default: 0,
+    },
+
     status: {
       type: String,
       enum: ["Pending", "Approved", "Rejected"],

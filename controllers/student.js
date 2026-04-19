@@ -139,9 +139,10 @@ const registerInEvent = asyncHandler(async (req, res) => {
   const { eventId } = req.params;
 
   const session = await mongoose.startSession();
-  session.startTransaction();
 
   try {
+    session.startTransaction();
+
     const event = await Event.findById(eventId).session(session);
     if (!event) throw new ApiError(404, "Event not found");
 
@@ -150,17 +151,17 @@ const registerInEvent = asyncHandler(async (req, res) => {
     }
 
     if (event.capacity !== null) {
-      const registrationCount = await Registration.countDocuments(
+      const update = await Event.updateOne(
         {
           event: eventId,
-          status: { $in: ["reserved", "confirmed"] },
-          expiresAt: { $gt: new Date() },
+          seatTaken: { $lt: event.capacity },
         },
+        { $inc: { seatTaken: 1 } },
         { session },
       );
 
-      if (registrationCount >= event.capacity) {
-        throw new ApiError(400, "Registration is full");
+      if (update.modifiedCount === 0) {
+        throw new ApiError(400, "Event is full");
       }
     }
 

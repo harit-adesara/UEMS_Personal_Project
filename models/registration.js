@@ -37,7 +37,7 @@ const registrationSchema = new Schema(
 
     status: {
       type: String,
-      enum: ["reserved", "confirmed", "expired"],
+      enum: ["reserved", "confirmed", "expired", "failed"],
       default: "reserved",
       index: true,
     },

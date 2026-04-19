@@ -3,6 +3,7 @@ import { ApiError } from "../utils/api_error.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { Registration } from "../models/registration.js";
 import { Attendance } from "../models/attendance.js";
+import { Event } from "../models/event.js";
 import mongoose from "mongoose";
 import { generalNotification, studentNotification } from "../db/bullmq.js";
 import crypto from "crypto";
@@ -11,13 +12,15 @@ export const verifyPayment = asyncHandler(async (req, res) => {
   const { razorpayOrderId, razorpayPaymentId, signature, eventId } = req.body;
 
   const session = await mongoose.startSession();
-  session.startTransaction();
 
   try {
+    session.startTransaction();
+
     const registration = await Registration.findOne({
       student: req.user._id,
       event: eventId,
-      razorpayOrderId: razorpayOrderId,
+      razorpayOrderId,
+      status: "reserved",
     }).session(session);
 
     if (!registration) {
@@ -37,32 +40,44 @@ export const verifyPayment = asyncHandler(async (req, res) => {
 
     const secret = process.env.RAZORPAY_KEY_SECRET;
     const hmac = crypto.createHmac("sha256", secret);
-    hmac.update(razorpayOrderId + "|" + razorpayPaymentId);
+    hmac.update(`${razorpayOrderId}|${razorpayPaymentId}`);
 
     const generatedSignature = hmac.digest("hex");
 
     if (generatedSignature !== signature) {
-      throw new ApiError(400, "Invalid signature");
+      await Registration.updateOne(
+        { _id: registration._id },
+        { status: "failed" },
+        { session },
+      );
+
+      await Event.updateOne(
+        { _id: eventId },
+        { $inc: { seatTaken: -1 } },
+        { session },
+      );
+
+      await session.commitTransaction();
+
+      return res
+        .status(400)
+        .json(new ApiResponse(400, "Payment verification failed"));
     }
 
-    const update = await Registration.findOneAndUpdate(
-      {
-        student: req.user._id,
-        event: eventId,
-        razorpayOrderId: razorpayOrderId,
-      },
+    const update = await Registration.updateOne(
+      { _id: registration._id },
       {
         paid: true,
         status: "confirmed",
-        razorpayPaymentId: razorpayPaymentId,
+        razorpayPaymentId,
         paidAt: new Date(),
         expiresAt: null,
       },
-      { new: true, session },
+      { session },
     );
 
-    if (!update) {
-      throw new ApiError(404, "Registration not found");
+    if (update.modifiedCount === 0) {
+      throw new ApiError(404, "Error updating registration");
     }
 
     let attendanceDoc = await Attendance.findOne({ event: eventId }).session(
@@ -110,11 +125,9 @@ export const verifyPayment = asyncHandler(async (req, res) => {
     void generalNotification({
       data: {
         userId: req.user._id,
-        title: "Register in Event",
+        title: "Registered in Event",
         body: `You have registered in event ${eventId}`,
-        meta: {
-          eventId: eventId,
-        },
+        meta: { eventId },
       },
       type: "RegisterInEvent",
     });
