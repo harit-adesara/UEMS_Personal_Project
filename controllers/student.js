@@ -87,7 +87,9 @@ const addFeedback = asyncHandler(async (req, res) => {
 
   await feedbackDoc.save();
 
-  res.status(201).json(new ApiResponse(200, { message: "Feedback submitted" }));
+  return res
+    .status(201)
+    .json(new ApiResponse(200, { message: "Feedback submitted" }));
 }); // complete
 
 const markAttendanceQR = asyncHandler(async (req, res) => {
@@ -95,6 +97,12 @@ const markAttendanceQR = asyncHandler(async (req, res) => {
 
   if (!eventId || !token) {
     throw new ApiError(404, "Event ID or Token not found");
+  }
+
+  const stored = await getToken(eventId);
+
+  if (!stored || stored !== token) {
+    throw new ApiError(400, "Invalid or expired QR");
   }
 
   const userId = req.user._id;
@@ -115,12 +123,6 @@ const markAttendanceQR = asyncHandler(async (req, res) => {
 
   if (record.status === "Present") {
     return res.status(400).json({ message: "Attendance already marked" });
-  }
-
-  const stored = await getToken(eventId);
-
-  if (!stored || stored !== token) {
-    throw new ApiError(400, "Invalid or expired QR");
   }
 
   record.status = "Present";
@@ -415,7 +417,7 @@ const getStudentAttendance = asyncHandler(async (req, res) => {
     throw new ApiError(404, "No attendance found");
   }
 
-  res
+  return res
     .status(200)
     .json(
       new ApiResponse(200, { filtered }, "Attendance fetched successfully"),

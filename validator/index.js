@@ -362,35 +362,6 @@ const createEventValidator = () => {
           throw new Error("Targets must be an array");
         }
 
-        parsed.forEach((t) => {
-          if (!t.school) throw new Error("School is required");
-
-          if (!Array.isArray(t.branches)) {
-            throw new Error("Branches must be array");
-          }
-
-          t.branches.forEach((b) => {
-            if (!b.branch) {
-              throw new Error("Branch is required");
-            }
-
-            if (b.divisions?.length && !b.branch) {
-              throw new Error("Branch required when divisions are provided");
-            }
-
-            if (
-              b.StudentYear != null &&
-              (b.StudentYear < 1 || b.StudentYear > 5)
-            ) {
-              throw new Error("Invalid StudentYear");
-            }
-
-            if (b.divisions && !Array.isArray(b.divisions)) {
-              throw new Error("Divisions must be array");
-            }
-          });
-        });
-
         return true;
       }),
 
@@ -495,35 +466,6 @@ const modifyEventBeforeApproveValidator = () => {
         if (!Array.isArray(parsed)) {
           throw new Error("Targets must be an array");
         }
-
-        parsed.forEach((t) => {
-          if (!t.school) throw new Error("School is required");
-
-          if (!Array.isArray(t.branches)) {
-            throw new Error("Branches must be array");
-          }
-
-          t.branches.forEach((b) => {
-            if (!b.branch) {
-              throw new Error("Branch is required");
-            }
-
-            if (b.divisions?.length && !b.branch) {
-              throw new Error("Branch required when divisions are provided");
-            }
-
-            if (
-              b.StudentYear != null &&
-              (b.StudentYear < 1 || b.StudentYear > 5)
-            ) {
-              throw new Error("Invalid StudentYear");
-            }
-
-            if (b.divisions && !Array.isArray(b.divisions)) {
-              throw new Error("Divisions must be array");
-            }
-          });
-        });
 
         return true;
       }),
