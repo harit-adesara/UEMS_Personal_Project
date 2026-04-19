@@ -268,7 +268,8 @@ const modifyEventValidator = () => {
     body("amount")
       .optional()
       .isFloat({ min: 0 })
-      .withMessage("Amount must be a non-negative number"),
+      .withMessage("Amount must be a non-negative number")
+      .toFloat(),
 
     body().custom((value) => {
       const restrictedFields = ["status", "approvalHistory", "organizedBy"];
@@ -342,7 +343,8 @@ const createEventValidator = () => {
     body("amount")
       .optional()
       .isFloat({ min: 0 })
-      .withMessage("Amount must be a non-negative number"),
+      .withMessage("Amount must be a non-negative number")
+      .toFloat(),
 
     body("targets")
       .notEmpty()
@@ -476,7 +478,8 @@ const modifyEventBeforeApproveValidator = () => {
     body("amount")
       .optional()
       .isFloat({ min: 0 })
-      .withMessage("Amount must be non-negative"),
+      .withMessage("Amount must be non-negative")
+      .toFloat(),
 
     body("targets")
       .optional()
