@@ -224,6 +224,12 @@ const modifyEventValidator = () => {
         }
       }),
 
+    body("capacity")
+      .optional({ nullable: true })
+      .isInt({ min: 1 })
+      .toInt()
+      .withMessage("capacity must be a positive integer"),
+
     body("startTime")
       .optional()
       .isISO8601()
@@ -386,6 +392,12 @@ const createEventValidator = () => {
         return true;
       }),
 
+    body("capacity")
+      .optional({ nullable: true })
+      .isInt({ min: 1 })
+      .toInt()
+      .withMessage("capacity must be a positive integer"),
+
     body("epsFile").custom((value, { req }) => {
       if (!req.files || !req.files.epsFile) {
         throw new Error("EPS file is required");
@@ -414,6 +426,12 @@ const modifyEventBeforeApproveValidator = () => {
       .isString()
       .trim()
       .withMessage("Detail must be a string"),
+
+    body("capacity")
+      .optional({ nullable: true })
+      .isInt({ min: 1 })
+      .toInt()
+      .withMessage("capacity must be a positive integer"),
 
     body("startTime")
       .optional()
@@ -516,6 +534,12 @@ const modifyEventAfterApproveValidator = () => {
       .isString()
       .trim()
       .withMessage("Detail must be a string"),
+
+    body("capacity")
+      .optional({ nullable: true })
+      .isInt({ min: 1 })
+      .toInt()
+      .withMessage("capacity must be a positive integer"),
 
     body("startTime")
       .optional()

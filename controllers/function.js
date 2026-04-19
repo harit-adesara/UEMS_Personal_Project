@@ -1278,7 +1278,7 @@ const createEventFaculty = asyncHandler(async (req, res) => {
     throw new ApiError(400, "Registration deadline must be before start time");
   }
 
-  if (capacity != undefined) {
+  if (capacity !== undefined) {
     if (typeof capacity !== "number") {
       throw new ApiError(400, "Capacity must be a number");
     }
@@ -1437,7 +1437,7 @@ const createEventHoD = asyncHandler(async (req, res) => {
     throw new ApiError(400, "Registration deadline must be before start time");
   }
 
-  if (capacity != undefined) {
+  if (capacity !== undefined) {
     if (typeof capacity !== "number") {
       throw new ApiError(400, "Capacity must be a number");
     }
@@ -1610,7 +1610,7 @@ const createEventDean = asyncHandler(async (req, res) => {
     throw new ApiError(400, "Registration deadline must be before start time");
   }
 
-  if (capacity != undefined) {
+  if (capacity !== undefined) {
     if (typeof capacity !== "number") {
       throw new ApiError(400, "Capacity must be a number");
     }
@@ -1778,7 +1778,7 @@ const createEventDirector = asyncHandler(async (req, res) => {
     throw new ApiError(400, "Registration deadline must be before start time");
   }
 
-  if (capacity != undefined) {
+  if (capacity !== undefined) {
     if (typeof capacity !== "number") {
       throw new ApiError(400, "Capacity must be a number");
     }
@@ -1931,7 +1931,7 @@ const createEventClub = asyncHandler(async (req, res) => {
     throw new ApiError(400, "Registration deadline must be before start time");
   }
 
-  if (capacity != undefined) {
+  if (capacity !== undefined) {
     if (typeof capacity !== "number") {
       throw new ApiError(400, "Capacity must be a number");
     }
