@@ -1,6 +1,8 @@
 import { Worker } from "bullmq";
 import { admin } from "../db/firebase_msg.js";
 import { User } from "../models/user.js";
+import { Registration } from "../models/registration.js";
+import mongoose from "mongoose";
 import dotenv, { config } from "dotenv";
 dotenv.config({
   path: "./.env",
@@ -132,6 +134,54 @@ export const studentWorker = new Worker(
       } catch (error) {
         throw error;
       }
+    }
+  },
+  {
+    connection: {
+      url: process.env.UPSTASH_REDIS_URL,
+    },
+  },
+);
+
+export const paymentWorker = new Worker(
+  "payment",
+  async (job) => {
+    const { registerId } = job.data;
+
+    if (!registerId) return;
+
+    const session = await mongoose.startSession();
+
+    try {
+      await session.startTransaction();
+
+      const registration =
+        await Registration.findById(registerId).session(session);
+
+      if (
+        !registration ||
+        registration.paid ||
+        registration.status !== "reserved"
+      ) {
+        await session.abortTransaction();
+        return;
+      }
+
+      await Event.updateOne(
+        { _id: registration.event },
+        { $inc: { seatTaken: -1 } },
+        { session },
+      );
+
+      registration.status = "expired";
+      await registration.save({ session });
+
+      await session.commitTransaction();
+    } catch (error) {
+      await session.abortTransaction();
+      throw error;
+    } finally {
+      session.endSession();
     }
   },
   {

@@ -12,7 +12,11 @@ import { redis, storeToken, getToken } from "../db/redis.js";
 import { Attendance } from "../models/attendance.js";
 import { Registration } from "../models/registration.js";
 import mongoose from "mongoose";
-import { generalNotification, studentNotification } from "../db/bullmq.js";
+import {
+  generalNotification,
+  studentNotification,
+  paymentQueue,
+} from "../db/bullmq.js";
 
 const addFeedback = asyncHandler(async (req, res) => {
   if (req.user.role !== "Student") {
@@ -150,10 +154,39 @@ const registerInEvent = asyncHandler(async (req, res) => {
       throw new ApiError(404, "Event is not accepted yet");
     }
 
+    const now = new Date();
+
+    const exisits = await Registration.findOne(
+      {
+        student: req.user._id,
+        event: event._id,
+        paid: true,
+      },
+      { session },
+    );
+
+    if (existing?.status === "confirmed") {
+      throw new ApiError(400, "Already registered");
+    }
+
+    if (existing?.status === "reserved" && existing?.expiresAt > now) {
+      await session.commitTransaction();
+
+      return res
+        .status(200)
+        .json(
+          new ApiResponse(
+            200,
+            { registration: existing },
+            "Already in payment window",
+          ),
+        );
+    }
+
     if (event.capacity !== null) {
       const update = await Event.updateOne(
         {
-          event: eventId,
+          _id: eventId,
           seatTaken: { $lt: event.capacity },
         },
         { $inc: { seatTaken: 1 } },
@@ -177,27 +210,30 @@ const registerInEvent = asyncHandler(async (req, res) => {
       });
     }
 
-    const [registration] = await Registration.create(
-      [
-        {
-          event: eventId,
-          student: req.user._id,
+    const registration = await Registration.findOneAndUpdate(
+      {
+        event: eventId,
+        student: req.user._id,
+      },
+      {
+        $set: {
           school: req.user.school,
           branch: req.user.branch,
           division: req.user.division,
-
           status: event.amount === 0 ? "confirmed" : "reserved",
           paid: event.amount === 0,
-
+          fee: event.amount,
           razorpayOrderId: order ? order.id : null,
-
           registeredAt: new Date(),
-
           expiresAt:
             event.amount > 0 ? new Date(Date.now() + 15 * 60 * 1000) : null,
         },
-      ],
-      { session },
+      },
+      {
+        upsert: true,
+        new: true,
+        session,
+      },
     );
 
     if (event.amount === 0) {
@@ -231,6 +267,19 @@ const registerInEvent = asyncHandler(async (req, res) => {
         },
         type: "RegisterInEvent",
       });
+    }
+
+    if (event.amount > 0) {
+      try {
+        await paymentQueue({
+          data: {
+            registerId: registration._id,
+          },
+          type: "PaymentExpiry",
+        });
+      } catch (error) {
+        console.error("Failed to schedule payment expiry:", error.message);
+      }
     }
 
     return res.status(200).json(

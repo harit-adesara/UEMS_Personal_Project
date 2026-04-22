@@ -3,7 +3,7 @@ import { Registration } from "../models/registration.js";
 import mongoose from "mongoose";
 
 export const startExpireRegistrationsJob = () => {
-  cron.schedule("* * * * *", async () => {
+  cron.schedule("0 */6 * * *", async () => {
     const session = await mongoose.startSession();
 
     try {
@@ -20,15 +20,15 @@ export const startExpireRegistrationsJob = () => {
       }
 
       for (const reg of expiredRegs) {
-        await Registration.updateOne(
-          { _id: reg._id },
-          { status: "expired" },
-          { session },
-        );
-
         await Event.updateOne(
           { _id: reg.event },
           { $inc: { seatsTaken: -1 } },
+          { session },
+        );
+
+        await Registration.updateOne(
+          { _id: reg._id },
+          { status: "expired" },
           { session },
         );
       }

@@ -20,7 +20,6 @@ export const verifyPayment = asyncHandler(async (req, res) => {
       student: req.user._id,
       event: eventId,
       razorpayOrderId,
-      status: "reserved",
     }).session(session);
 
     if (!registration) {
@@ -38,6 +37,14 @@ export const verifyPayment = asyncHandler(async (req, res) => {
         .json(new ApiResponse(200, "Payment is already verified"));
     }
 
+    //
+
+    if (registration.status === "expired") {
+      throw new ApiError(400, "Payment window expired. Please register again.");
+    }
+
+    //
+
     const secret = process.env.RAZORPAY_KEY_SECRET;
     const hmac = crypto.createHmac("sha256", secret);
     hmac.update(`${razorpayOrderId}|${razorpayPaymentId}`);
@@ -45,19 +52,7 @@ export const verifyPayment = asyncHandler(async (req, res) => {
     const generatedSignature = hmac.digest("hex");
 
     if (generatedSignature !== signature) {
-      await Registration.updateOne(
-        { _id: registration._id },
-        { status: "failed" },
-        { session },
-      );
-
-      await Event.updateOne(
-        { _id: eventId },
-        { $inc: { seatTaken: -1 } },
-        { session },
-      );
-
-      await session.commitTransaction();
+      await session.abortTransaction();
 
       return res
         .status(400)
