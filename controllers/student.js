@@ -156,16 +156,15 @@ const registerInEvent = asyncHandler(async (req, res) => {
 
     const now = new Date();
 
-    const exisits = await Registration.findOne(
+    const existing = await Registration.findOne(
       {
         student: req.user._id,
         event: event._id,
-        paid: true,
       },
       { session },
     );
 
-    if (existing?.status === "confirmed") {
+    if (existing?.status === "confirmed" && existing.paid) {
       throw new ApiError(400, "Already registered");
     }
 
