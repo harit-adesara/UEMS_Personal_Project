@@ -17,7 +17,7 @@ export const attachUser = async (req, res, next) => {
     }
 
     if (!req._userChecked) {
-      req._user = await User.findOne({ email }).select("_id email password");
+      req._user = await User.findOne({ email }).select("_id email");
       req._userChecked = true;
     }
 
@@ -49,7 +49,7 @@ export const knownEmailLimiter = rateLimit({
 
   keyGenerator: (req) => {
     if (!req.body?.email) return ipKeyGenerator(req);
-    return `email-${req.body.email}`;
+    return `email-${req.body.email?.toLowerCase()}`;
   },
 
   skip: (req) => !req._user || !!req.user,
