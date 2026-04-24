@@ -1,9 +1,6 @@
 import rateLimit, { ipKeyGenerator } from "express-rate-limit";
 import { User } from "../models/user.js";
 
-/**
- * Attach user (based on email) before rate limiting
- */
 export const attachUser = async (req, res, next) => {
   try {
     if (req.user) {
@@ -30,9 +27,6 @@ export const attachUser = async (req, res, next) => {
   }
 };
 
-/**
- * Global IP limiter
- */
 export const ipLimiter = rateLimit({
   windowMs: 60 * 60 * 1000, // 1 hour
   max: 50,
@@ -47,9 +41,6 @@ export const ipLimiter = rateLimit({
   },
 });
 
-/**
- * Known email limiter (valid account)
- */
 export const knownEmailLimiter = rateLimit({
   windowMs: 30 * 60 * 1000, // 30 min
   max: 5,
@@ -69,9 +60,6 @@ export const knownEmailLimiter = rateLimit({
   },
 });
 
-/**
- * Unknown email limiter (invalid account attempts)
- */
 export const unknownEmailLimiter = rateLimit({
   windowMs: 60 * 60 * 1000, // 1 hour
   max: 5,
@@ -88,9 +76,6 @@ export const unknownEmailLimiter = rateLimit({
   },
 });
 
-/**
- * Resend email limiter
- */
 export const resendEmailLimiter = rateLimit({
   windowMs: 3 * 60 * 60 * 1000, // 3 hours
   max: 5,
