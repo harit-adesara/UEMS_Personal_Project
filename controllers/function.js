@@ -16,10 +16,10 @@ import { redis } from "../db/redis.js";
 const validateSchool = async (school) => {
   if (!school) return null;
   const query = mongoose.Types.ObjectId.isValid(school)
-    ? { _id: school }
-    : { name: school };
+    ? { _id: school, isDeleted: false }
+    : { name: school, isDeleted: false };
   const schoolObj = await School.findOne(query);
-  if (!schoolObj || schoolObj.isDeleted) {
+  if (!schoolObj) {
     throw new ApiError(400, "Invalid school");
   }
   return schoolObj._id;
@@ -36,8 +36,8 @@ const validateBranch = async (branch, school) => {
   if (mongoose.Types.ObjectId.isValid(school)) {
     schoolId = school.toString();
   } else {
-    const schoolObj = await School.findOne({ name: school });
-    if (!schoolObj || schoolObj.isDeleted) {
+    const schoolObj = await School.findOne({ name: school, isDeleted: false });
+    if (!schoolObj) {
       throw new ApiError(400, "Invalid school");
     }
     schoolId = schoolObj._id.toString();
@@ -49,37 +49,54 @@ const validateBranch = async (branch, school) => {
     branchObj = await Branch.findOne({
       _id: branch,
       school: schoolId,
+      isDeleted: false,
     });
   } else {
     branchObj = await Branch.findOne({
       name: branch,
       school: schoolId,
+      isDeleted: false,
     });
   }
 
-  if (!branchObj || branchObj.isDeleted) {
+  if (!branchObj) {
     throw new ApiError(400, "Invalid branch for given school");
   }
 
   return branchObj._id;
 }; // complete
 
-const validateDivision = async (division, branch) => {
+const validateDivision = async (division, branch, school) => {
   if (!division) return null;
 
   if (!branch) {
     throw new ApiError(400, "Branch is required for division validation");
   }
 
+  if (!school) {
+    throw new ApiError(400, "School is required for division validation");
+  }
+
   let branchId;
   if (mongoose.Types.ObjectId.isValid(branch)) {
     branchId = branch.toString();
   } else {
-    const branchObj = await Branch.findOne({ name: branch });
-    if (!branchObj || branchObj.isDeleted) {
+    const branchObj = await Branch.findOne({ name: branch, isDeleted: false });
+    if (!branchObj) {
       throw new ApiError(400, "Invalid branch");
     }
     branchId = branchObj._id.toString();
+  }
+
+  let schoolId;
+  if (mongoose.Types.ObjectId.isValid(school)) {
+    schoolId = school.toString();
+  } else {
+    const schoolObj = await School.findOne({ name: school, isDeleted: false });
+    if (!schoolObj) {
+      throw new ApiError(400, "Invalid School");
+    }
+    schoolId = schoolObj._id.toString();
   }
 
   let divisionObj;
@@ -88,15 +105,19 @@ const validateDivision = async (division, branch) => {
     divisionObj = await Division.findOne({
       _id: division,
       branch: branchId,
+      school: schoolId,
+      isDeleted: false,
     });
   } else {
     divisionObj = await Division.findOne({
       name: division,
       branch: branchId,
+      school: schoolId,
+      isDeleted: false,
     });
   }
 
-  if (!divisionObj || divisionObj.isDeleted) {
+  if (!divisionObj) {
     throw new ApiError(400, "Invalid division for given branch");
   }
 
@@ -138,7 +159,7 @@ const createUser = asyncHandler(async (req, res) => {
 
   if (school) school = await validateSchool(school);
   if (branch) branch = await validateBranch(branch, school);
-  if (division) division = await validateDivision(division, branch);
+  if (division) division = await validateDivision(division, branch, school);
 
   let user = await User.findOne({ email });
 
@@ -388,6 +409,7 @@ const modifyUser = asyncHandler(async (req, res) => {
     updates.division = await validateDivision(
       updates.division,
       updates.branch || user.branch,
+      updates.school || user.school,
     );
 
   for (const key of Object.keys(updates)) {
@@ -611,7 +633,11 @@ const modifyEvent = asyncHandler(async (req, res) => {
 
           let divisionIds = [];
           for (let k = 0; k < b.divisions.length; k++) {
-            const divisionId = await validateDivision(b.divisions[k], b.branch);
+            const divisionId = await validateDivision(
+              b.divisions[k],
+              b.branch,
+              t.school,
+            );
             divisionIds.push(divisionId);
           }
           b.divisions = divisionIds;
@@ -1331,7 +1357,11 @@ const createEventFaculty = asyncHandler(async (req, res) => {
 
         let divisionIds = [];
         for (let k = 0; k < b.divisions.length; k++) {
-          const divisionId = await validateDivision(b.divisions[k], b.branch);
+          const divisionId = await validateDivision(
+            b.divisions[k],
+            b.branch,
+            t.school,
+          );
           divisionIds.push(divisionId);
         }
         b.divisions = divisionIds;
@@ -1490,7 +1520,11 @@ const createEventHoD = asyncHandler(async (req, res) => {
 
         let divisionIds = [];
         for (let k = 0; k < b.divisions.length; k++) {
-          const divisionId = await validateDivision(b.divisions[k], b.branch);
+          const divisionId = await validateDivision(
+            b.divisions[k],
+            b.branch,
+            t.school,
+          );
           divisionIds.push(divisionId);
         }
         b.divisions = divisionIds;
@@ -1663,7 +1697,11 @@ const createEventDean = asyncHandler(async (req, res) => {
 
         let divisionIds = [];
         for (let k = 0; k < b.divisions.length; k++) {
-          const divisionId = await validateDivision(b.divisions[k], b.branch);
+          const divisionId = await validateDivision(
+            b.divisions[k],
+            b.branch,
+            t.school,
+          );
           divisionIds.push(divisionId);
         }
         b.divisions = divisionIds;
@@ -1831,7 +1869,11 @@ const createEventDirector = asyncHandler(async (req, res) => {
 
         let divisionIds = [];
         for (let k = 0; k < b.divisions.length; k++) {
-          const divisionId = await validateDivision(b.divisions[k], b.branch);
+          const divisionId = await validateDivision(
+            b.divisions[k],
+            b.branch,
+            t.school,
+          );
           divisionIds.push(divisionId);
         }
         b.divisions = divisionIds;
@@ -1984,7 +2026,11 @@ const createEventClub = asyncHandler(async (req, res) => {
 
         let divisionIds = [];
         for (let k = 0; k < b.divisions.length; k++) {
-          const divisionId = await validateDivision(b.divisions[k], b.branch);
+          const divisionId = await validateDivision(
+            b.divisions[k],
+            b.branch,
+            t.school,
+          );
           divisionIds.push(divisionId);
         }
         b.divisions = divisionIds;

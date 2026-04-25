@@ -14,6 +14,13 @@ const divisionSchema = new Schema(
       ref: "Branch",
       required: true,
     },
+
+    school: {
+      type: Schema.Types.ObjectId,
+      ref: "School",
+      required: true,
+    },
+
     isDeleted: {
       type: Boolean,
       default: false,
@@ -23,7 +30,7 @@ const divisionSchema = new Schema(
 );
 
 divisionSchema.index(
-  { name: 1, branch: 1 },
+  { name: 1, branch: 1, school: 1 },
   { unique: true, partialFilterExpression: { isDeleted: false } },
 );
 

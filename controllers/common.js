@@ -119,7 +119,11 @@ const modifyEventBeforeApproveCommon = asyncHandler(async (req, res) => {
 
           let divisionIds = [];
           for (let k = 0; k < b.divisions.length; k++) {
-            const divisionId = await validateDivision(b.divisions[k], b.branch);
+            const divisionId = await validateDivision(
+              b.divisions[k],
+              b.branch,
+              t.school,
+            );
             divisionIds.push(divisionId);
           }
           b.divisions = divisionIds;
