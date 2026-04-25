@@ -805,17 +805,26 @@ const createBranch = asyncHandler(async (req, res) => {
       throw new ApiError(404, "Name and School require");
     }
 
-    const existing = await Branch.findOne({
-      $and: [{ name }, { school }],
+    let schoolObj = await School.findOne({
+      name: school,
+      isDeleted: false,
     });
 
-    if (existing && existing.isDeleted === false) {
+    if (!schoolObj) {
+      throw new ApiError(404, "Invalid school");
+    }
+
+    const existing = await Branch.findOne({
+      $and: [{ name }, { school: schoolObj._id }, { isDeleted: false }],
+    });
+
+    if (existing) {
       throw new ApiError(404, "This branch already exists");
     }
 
     const branch = await Branch.create({
       name,
-      school,
+      school: schoolObj._id,
       isDeleted: false,
     });
     if (!branch) {
@@ -840,9 +849,9 @@ const createSchool = asyncHandler(async (req, res) => {
       throw new ApiError(404, "Name require");
     }
 
-    const existing = await School.findOne({ name });
+    const existing = await School.findOne({ name, isDeleted: false });
 
-    if (existing && existing.isDeleted === false) {
+    if (existing) {
       throw new ApiError(404, "This school already exists");
     }
 
@@ -866,23 +875,45 @@ const createDivision = asyncHandler(async (req, res) => {
     if (req.user.role !== "Admin") {
       throw new ApiError(404, "Unauthorized user");
     }
-    const { name, branch } = req.body;
+    const { name, branch, school } = req.body;
 
-    if (!name || !branch) {
-      throw new ApiError(404, "Name and Branch require");
+    if (!name || !branch || !school) {
+      throw new ApiError(404, "Name,School and Branch require");
+    }
+
+    let schoolObj = await School.findOne({ name: school, isDeleted: false });
+
+    if (!schoolObj) {
+      throw new ApiError(404, "Invalid school");
+    }
+
+    let branchObj = await Branch.findOne({
+      name: branch,
+      school: schoolObj._id,
+      isDeleted: false,
+    });
+
+    if (!branchObj) {
+      throw new ApiError(404, "Invalid branch");
     }
 
     const existing = await Division.findOne({
-      $and: [{ name }, { branch }],
+      $and: [
+        { name },
+        { branch: branchObj._id },
+        { school: schoolObj._id },
+        { isDeleted: false },
+      ],
     });
 
-    if (existing && existing.isDeleted === false) {
+    if (existing) {
       throw new ApiError(404, "This division already exists");
     }
 
     const division = await Division.create({
       name,
-      branch,
+      branch: branchObj._id,
+      school: schoolObj._id,
       isDeleted: false,
     });
     if (!division) {
@@ -905,11 +936,20 @@ const getBranch = asyncHandler(async (req, res) => {
     throw new ApiError(404, "Name or school not found");
   }
 
-  const schoolObj = await School.find({ name: school });
+  const schoolObj = await School.findOne({ name: school, isDeleted: false });
 
-  const branch = await Branch.findOne({ name: name, school: schoolObj._id });
+  if (!schoolObj) {
+    throw new ApiError(404, "School is not valid");
+  }
+
+  const branch = await Branch.findOne({
+    name: name,
+    school: schoolObj._id,
+    isDeleted: false,
+  }).populate("school", "name");
+
   if (!branch) {
-    throw new ApiError(404, "Branch not found");
+    throw new ApiError(404, "Branch is not valid");
   }
   return res
     .status(200)
@@ -923,7 +963,7 @@ const getSchool = asyncHandler(async (req, res) => {
     throw new ApiError(404, "name not found");
   }
 
-  const school = await Branch.findOne({ name: name });
+  const school = await Branch.findOne({ name: name, isDeleted: false });
   if (!school) {
     throw new ApiError(404, "School not found");
   }
@@ -933,12 +973,35 @@ const getSchool = asyncHandler(async (req, res) => {
 }); // complete
 
 const getDivision = asyncHandler(async (req, res) => {
-  const { name, branch } = req.body;
-  if (!name || !branch) {
-    throw new ApiError(404, "Name or branch not found");
+  const { name, branch, school } = req.body;
+  if (!name || !branch || !school) {
+    throw new ApiError(404, "Name,school or branch not found");
   }
-  const branchObj = await Branch.find({ name: branch });
-  const division = await Division.find({ name: name, branch: branchObj._id });
+  const schoolObj = await School.findOne({ name: school, isDeleted: false });
+
+  if (!schoolObj) {
+    throw new ApiError(404, "School is not valid");
+  }
+
+  const branchObj = await Branch.findOne({
+    name: branch,
+    school: schoolObj._id,
+    isDeleted: false,
+  });
+
+  if (!branchObj) {
+    throw new ApiError(404, "branch is not valid");
+  }
+
+  const division = await Division.findOne({
+    name: name,
+    branch: branchObj._id,
+    school: schoolObj._id,
+    isDeleted: false,
+  })
+    .populate("school", "name")
+    .populate("branch", "name");
+
   if (!division) {
     throw new ApiError(404, "Division not found");
   }
@@ -948,63 +1011,69 @@ const getDivision = asyncHandler(async (req, res) => {
 }); // complete
 
 const modifyBranch = asyncHandler(async (req, res) => {
-  try {
-    if (req.user.role !== "Admin") {
-      throw new ApiError(404, "Unauthorized user");
-    }
-    const { branchId, ...updates } = req.body;
-
-    if (!branchId) {
-      throw new ApiError(400, "Branch ID is required");
-    }
-
-    const branch = await Branch.findById(branchId);
-
-    if (!branch || branch.isDeleted) {
-      throw new ApiError(404, "Branch not found");
-    }
-
-    const allowedFields = ["name", "school"];
-
-    for (const key of Object.keys(updates)) {
-      if (!allowedFields.includes(key)) {
-        throw new ApiError(400, `Invalid field: ${key}`);
-      }
-    }
-
-    const newName =
-      updates.name !== undefined ? updates.name.trim() : branch.name;
-
-    const newSchool = updates.school || branch.school;
-
-    if (updates.name !== undefined || updates.school !== undefined) {
-      const existing = await Branch.findOne({
-        name: newName,
-        school: newSchool,
-        _id: { $ne: branchId },
-      });
-
-      if (existing) {
-        throw new ApiError(409, "Branch already exists in this school");
-      }
-    }
-
-    if (updates.name !== undefined) {
-      branch.name = newName;
-    }
-
-    if (updates.school !== undefined) {
-      branch.school = updates.school;
-    }
-
-    await branch.save();
-
-    res
-      .status(200)
-      .json(new ApiResponse(200, branch, "Branch updated successfully"));
-  } catch (error) {
-    throw new ApiError(404, "Error while modifying event");
+  if (req.user.role !== "Admin") {
+    throw new ApiError(403, "Unauthorized user");
   }
+
+  const { branchId, ...updates } = req.body;
+
+  if (!branchId) {
+    throw new ApiError(400, "Branch ID is required");
+  }
+
+  const branch = await Branch.findById(branchId);
+
+  if (!branch || branch.isDeleted) {
+    throw new ApiError(404, "Branch not found");
+  }
+
+  const allowedFields = ["name", "school"];
+
+  for (const key of Object.keys(updates)) {
+    if (!allowedFields.includes(key)) {
+      throw new ApiError(400, `Invalid field: ${key}`);
+    }
+  }
+
+  let newName = branch.name;
+  let schoolId = branch.school;
+
+  if (updates.name !== undefined) {
+    newName = updates.name.trim();
+  }
+
+  if (updates.school !== undefined) {
+    const schoolObj = await School.findOne({
+      name: updates.school,
+      isDeleted: false,
+    });
+
+    if (!schoolObj) {
+      throw new ApiError(400, "Invalid school");
+    }
+
+    schoolId = schoolObj._id;
+  }
+
+  const existing = await Branch.findOne({
+    name: newName,
+    school: schoolId,
+    isDeleted: false,
+    _id: { $ne: branchId },
+  });
+
+  if (existing) {
+    throw new ApiError(409, "Branch already exists in this school");
+  }
+
+  branch.name = newName;
+  branch.school = schoolId;
+
+  await branch.save();
+
+  return res
+    .status(200)
+    .json(new ApiResponse(200, branch, "Branch updated successfully"));
 }); // complete
 
 const modifySchool = asyncHandler(async (req, res) => {
@@ -1059,7 +1128,7 @@ const modifySchool = asyncHandler(async (req, res) => {
 
 const modifyDivision = asyncHandler(async (req, res) => {
   if (req.user.role !== "Admin") {
-    throw new ApiError(404, "Unauthorized user");
+    throw new ApiError(403, "Unauthorized user");
   }
 
   const { divisionId, ...updates } = req.body;
@@ -1074,7 +1143,7 @@ const modifyDivision = asyncHandler(async (req, res) => {
     throw new ApiError(404, "Division not found");
   }
 
-  const allowedFields = ["name", "branch"];
+  const allowedFields = ["name", "branch", "school"];
 
   for (const key of Object.keys(updates)) {
     if (!allowedFields.includes(key)) {
@@ -1082,34 +1151,60 @@ const modifyDivision = asyncHandler(async (req, res) => {
     }
   }
 
-  const newName =
-    updates.name !== undefined ? updates.name.trim() : division.name;
-
-  const newBranch = updates.branch || division.branch;
-
-  if (updates.name !== undefined || updates.branch !== undefined) {
-    const existing = await Division.findOne({
-      name: newName,
-      branch: newBranch,
-      _id: { $ne: divisionId },
-    });
-
-    if (existing) {
-      throw new ApiError(409, "Division already exists in this branch");
-    }
-  }
+  let newName = division.name;
+  let newBranch = division.branch;
+  let newSchool = division.school;
 
   if (updates.name !== undefined) {
-    division.name = newName;
+    newName = updates.name.trim();
+  }
+
+  if (updates.school !== undefined) {
+    const schoolObj = await School.findOne({
+      name: updates.school,
+      isDeleted: false,
+    });
+
+    if (!schoolObj) {
+      throw new ApiError(400, "Invalid school");
+    }
+
+    newSchool = schoolObj._id;
   }
 
   if (updates.branch !== undefined) {
-    division.branch = updates.branch;
+    const branchObj = await Branch.findOne({
+      name: updates.branch,
+      school: newSchool,
+      isDeleted: false,
+    });
+
+    if (!branchObj) {
+      throw new ApiError(400, "Invalid branch");
+    }
+
+    newBranch = branchObj._id;
   }
+
+  const existing = await Division.findOne({
+    name: newName,
+    branch: newBranch,
+    school: newSchool,
+    isDeleted: false,
+    _id: { $ne: divisionId },
+  });
+
+  if (existing) {
+    throw new ApiError(409, "Division already exists in this branch");
+  }
+
+  division.name = newName;
+  division.branch = newBranch;
+  division.school = newSchool;
 
   await division.save();
 
-  res
+  return res
     .status(200)
     .json(new ApiResponse(200, division, "Division updated successfully"));
 }); // complete
