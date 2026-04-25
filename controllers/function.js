@@ -315,6 +315,7 @@ const eventStatusApprove = asyncHandler(async (req, res) => {
       timestamp: new Date(),
     });
     await event.save();
+
     void generalNotification({
       data: {
         userId: event.organizedBy,
@@ -326,6 +327,18 @@ const eventStatusApprove = asyncHandler(async (req, res) => {
       },
       type: "EventApproved",
     });
+    void studentNotification({
+      data: {
+        parsedTargets: event.parsedTargets,
+        title: "New Event",
+        body: `${event.name} event has been created`,
+        meta: {
+          eventId: eventId,
+        },
+      },
+      type: "createEvent",
+    });
+
     return res.status(200).json(200, "Event accepted");
   } catch (error) {
     throw new ApiError(404, "Error while approving event");
@@ -1520,6 +1533,18 @@ const createEventFaculty = asyncHandler(async (req, res) => {
     });
   }
 
+  void generalNotification({
+    data: {
+      userId: req.user._id,
+      title: "New Event",
+      body: "You have created new event",
+      meta: {
+        userId: req.user._id,
+      },
+    },
+    type: "newEvent",
+  });
+
   res
     .status(201)
     .json(new ApiResponse(201, { event }, "Event created successfully"));
@@ -1696,6 +1721,17 @@ const createEventHoD = asyncHandler(async (req, res) => {
       type: "createEvent",
     });
   }
+  void generalNotification({
+    data: {
+      userId: req.user._id,
+      title: "New Event",
+      body: "You have created new event",
+      meta: {
+        userId: req.user._id,
+      },
+    },
+    type: "newEvent",
+  });
 
   res
     .status(201)
@@ -1868,6 +1904,17 @@ const createEventDean = asyncHandler(async (req, res) => {
       type: "createEvent",
     });
   }
+  void generalNotification({
+    data: {
+      userId: req.user._id,
+      title: "New Event",
+      body: "You have created new event",
+      meta: {
+        userId: req.user._id,
+      },
+    },
+    type: "newEvent",
+  });
 
   res
     .status(201)
@@ -2025,6 +2072,17 @@ const createEventDirector = asyncHandler(async (req, res) => {
     },
     type: "createEvent",
   });
+  void generalNotification({
+    data: {
+      userId: req.user._id,
+      title: "New Event",
+      body: "You have created new event",
+      meta: {
+        userId: req.user._id,
+      },
+    },
+    type: "newEvent",
+  });
 
   res
     .status(201)
@@ -2175,19 +2233,17 @@ const createEventClub = asyncHandler(async (req, res) => {
     year,
   });
 
-  if (status === "Approved") {
-    void studentNotification({
-      data: {
-        parsedTargets: parsedTargets,
-        title: "New Event",
-        body: `${event.name} event has been created`,
-        meta: {
-          eventId: event._id,
-        },
+  void generalNotification({
+    data: {
+      userId: req.user._id,
+      title: "New Event",
+      body: "You have created new event",
+      meta: {
+        userId: req.user._id,
       },
-      type: "createEvent",
-    });
-  }
+    },
+    type: "newEvent",
+  });
 
   res
     .status(201)

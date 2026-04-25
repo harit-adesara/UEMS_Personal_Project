@@ -271,6 +271,7 @@ const modifyEventBeforeApproveCommon = asyncHandler(async (req, res) => {
   if (status) event.status = status;
 
   await event.save();
+
   void generalNotification({
     data: {
       userId: req.user._id,
@@ -376,6 +377,19 @@ const modifyEventAfterApproveCommon = asyncHandler(async (req, res) => {
   }
 
   await event.save();
+
+  await generalNotification({
+    data: {
+      userId: req.user._id,
+      title: "Event Approved",
+      body: `Your event ${event.name} has been approved`,
+      meta: {
+        eventId: event._id,
+      },
+    },
+    type: "EventRejected",
+  });
+
   void studentNotification({
     data: {
       parsedTargets: event.parsedTargets,
@@ -658,7 +672,7 @@ const eventStatusApproveCommon = asyncHandler(async (req, res) => {
       timestamp: new Date(),
     });
     await event.save();
-    await generalNotification({
+    void generalNotification({
       data: {
         userId: event.organizedBy,
         title: "Event Approved",
@@ -668,6 +682,17 @@ const eventStatusApproveCommon = asyncHandler(async (req, res) => {
         },
       },
       type: "EventApproved",
+    });
+    void studentNotification({
+      data: {
+        parsedTargets: event.parsedTargets,
+        title: "New Event",
+        body: `${event.name} event has been created`,
+        meta: {
+          eventId: event._id,
+        },
+      },
+      type: "createEvent",
     });
     return res.status(200).json(200, "Event accepted");
   } catch (error) {
@@ -705,7 +730,7 @@ const eventStatusRejectCommon = asyncHandler(async (req, res) => {
       timestamp: new Date(),
     });
     await event.save();
-    await generalNotification({
+    void generalNotification({
       data: {
         userId: event.organizedBy,
         title: "Event Approved",
