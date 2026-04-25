@@ -101,7 +101,9 @@ router
   .route("/resend-invite")
   .post(attachUser, resendEmailLimiter, resendCreateUserMail); //complete
 
-router.route("/register/:unHashedToken").post(registerval(), registerUser); // complete
+router
+  .route("/register/:unHashedToken")
+  .post(registerval(), validate, registerUser); // complete
 
 router.route("/refresh-token").post(refreshAccessToken);
 
@@ -119,6 +121,7 @@ router.route("/event/modify-before-approve/:eventId").post(
   ]),
   verifyJWT,
   modifyEventBeforeApproveValidator(),
+  validate,
   modifyEventBeforeApproveCommon,
 );
 
@@ -127,6 +130,7 @@ router
   .post(
     verifyJWT,
     modifyEventAfterApproveValidator(),
+    validate,
     modifyEventAfterApproveCommon,
   );
 
@@ -177,6 +181,7 @@ router.route("/event/club/create").post(
   ]),
   verifyJWT,
   createEventValidator(),
+  validate,
   createEventClub,
 );
 
@@ -187,6 +192,7 @@ router.route("/event/director/create").post(
   ]),
   verifyJWT,
   createEventValidator(),
+  validate,
   createEventDirector,
 );
 
@@ -197,6 +203,7 @@ router.route("/event/faculty/create").post(
   ]),
   verifyJWT,
   createEventValidator(),
+  validate,
   createEventFaculty,
 );
 
@@ -207,6 +214,7 @@ router.route("/event/hod/create").post(
   ]),
   verifyJWT,
   createEventValidator(),
+  validate,
   createEventHoD,
 ); // complete
 
@@ -217,14 +225,19 @@ router.route("/event/dean/create").post(
   ]),
   verifyJWT,
   createEventValidator(),
+  validate,
   createEventDean,
 );
 // ------------------- ADMIN -------------------
 
 // User
-router.route("/user/create").post(verifyJWT, createUserValidator(), createUser);
+router
+  .route("/user/create")
+  .post(verifyJWT, createUserValidator(), validate, createUser);
 
-router.route("/user/modify").put(verifyJWT, modifyUserValidator(), modifyUser);
+router
+  .route("/user/modify")
+  .put(verifyJWT, modifyUserValidator(), validate, modifyUser);
 
 router.route("/user/delete/:userId").delete(verifyJWT, deleteUser);
 
@@ -236,7 +249,9 @@ router.route("/event/approve/:eventId").put(verifyJWT, eventStatusApprove);
 
 router.route("/event/reject/:eventId").put(verifyJWT, eventStatusReject);
 
-router.route("/event/modify").put(verifyJWT, modifyEventValidator, modifyEvent);
+router
+  .route("/event/modify")
+  .put(verifyJWT, modifyEventValidator(), validate, modifyEvent);
 
 router.route("/branch/create").post(verifyJWT, createBranch);
 
